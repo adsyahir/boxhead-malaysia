@@ -12,10 +12,10 @@ Bare `pnpm` is a broken shim on this machine. Always use `corepack pnpm` (pinned
 corepack pnpm install
 corepack pnpm lint
 corepack pnpm typecheck
-corepack pnpm test                                   # game-core 72, protocol 29, server 25
+corepack pnpm test                                   # game-core 116, protocol 31, web 11, server 26
 corepack pnpm --filter @kampung/web dev              # http://localhost:3000/play
 cd apps/web && corepack pnpm exec next build
-cd apps/web && CI= corepack pnpm exec playwright test   # 9 tests; starts next dev :3100 + the Worker :8787 itself; uses installed Chrome
+cd apps/web && CI= corepack pnpm exec playwright test   # 12 tests; starts next dev :3100 + the Worker :8787 itself; uses installed Chrome
 corepack pnpm dev:online                             # online server on :8787 (run build:web once first)
 corepack pnpm deploy                                 # build site + deploy the Worker (needs wrangler login)
 corepack pnpm --filter @kampung/web maps             # regenerate tiles.png + 3 Tiled JSON maps
@@ -56,6 +56,10 @@ Done and committed on `main` (pushed to https://github.com/adsyahir/boxhead-mala
 
 Done but NOT committed (branch `feat/v1-phaser-client`, nothing has been committed since M3): M4, the Phaser client in `apps/web`: menu, map select, 3 generated maps, HUD, night lighting, camera (2P zoom), particles/shake, synthesised WebAudio SFX (mute on M, saved in localStorage), keyboard 1P/2P and touch controls, rotate prompt, Playwright smoke test. Verified: typecheck, lint, tests, next build, e2e, manual run of all 3 maps with no console errors. Not verified: touch on a real device, 2P camera feel, feel of all 8 weapons (needs a human playtest).
 
+### Levels, upgrades and sound (built, uncommitted)
+**Level and upgrade list** (from the owner's Boxhead screenshot): team level comes from team kills (`killsForLevel` in `packages/game-core/src/data/progression.ts`: 4 kills a level plus a small quadratic term; level 125 at about 2,030 kills, roughly wave 27; Uzi at wave 2, Meriam Buluh wave 12, Senapang Kilat wave 16). `UPGRADE_LIST` has all 58 entries; level 5/10/15/20/30/40/50/55/70 unlock weapons, the rest upgrade them (`weaponStats(id, level)`: Fast Fire x0.8 cooldown, Rapid Fire x0.6, Double/Quad Damage and Ammo x2/x4 (tiers replace, not stack), Long Shot x1.5 range, Infinite Range, Wide/Wider Shot (Wider adds 2 pellets), Big/Bigger Bang x1.25/x1.5 blast, Cluster Explode = 4 smaller blasts 0.12 s later). Weapon order is the key order: 1 Lastik, 2 Uzi, 3 Senapang Patah, 4 Tong Gas, 5 Bom Ikan, 6 Pagar Buluh, 7 Mercun Bola, 8 Meriam Buluh, 9 Bungkusan Bom (new: charge, explodes 2 s after being dropped), 0 Senapang Kilat (new: instant piercing beam, stops at walls). Number keys pick weapons directly (player 1 / solo; in 2P the number row is player 1's). Score no longer unlocks weapons (it is only score). HUD shows level + progress bar; toasts only for levels that give something; Upgrade List screen reachable from How to Play and the pause menu. The fixed-step accumulator moved into core (`advanceFrame`, tested): it carries one-frame taps (swap, number pick) over frames in which no step runs, which were being dropped on fast displays.
+**Sound** (all synthesised in the browser, no files): menu soundscape (drone, wind, far wails/creaks/thuds) starts after the first click or key (browsers block earlier; the menu shows a hint), stops in a run. In a run, `DreadAudio` makes a drone and heartbeat that build as the nearest enemy gets close, plus each ghost's own voice panned to where it is (pocong rattling moan, toyol giggle, pontianak wail), silent when paused. Maths is in `game/audio/dread-math.ts` (tested). Verified by measuring output level in headless Chrome (silent at 600 px, rising at 300 and 120 px); nobody has listened to it yet, so how scary it is and the volume balance need a human ear.
+
 ### Online rooms (built, uncommitted)
 Start -> Mode -> Online: create a public/private room (4-letter code) or join by code or from the public list; lobby (hero, map by host, ready, start); 2 players; no login (nickname only, remembered). Server-authoritative: `apps/server` runs game-core per room in a Durable Object, clients send input and render snapshots (20 Hz, interpolated 100 ms behind). A dropped player is downed and can rejoin (token in sessionStorage, 30 s) at the next wave. Game cannot be paused online (Esc opens a menu over the running game). On phones the mode screen shows only 1 Player and Online. Locally: `corepack pnpm dev:online` (worker on :8787) + web dev server; page finds the worker itself. Tests: core 72, protocol 29, server 25 (fake sockets, fake clock), Playwright 9 incl. a two-browser online test. Verified by hand: scripted second client against the real local Worker, host in the browser pane. NOT yet verified: deploying it, two real devices over the internet, phone touch in a room, long games, prediction (input latency is about one round trip plus ~100 ms).
 
@@ -83,7 +87,7 @@ Known gaps: no human playtest of feel/frame rate yet (the browser pane throttles
 - Fable (claude-fable-5-1) needs usage credits in the Claude desktop app. The owner wants to use it from the Claude Code terminal.
 
 ## Next steps (owner's order, 2026-10-31)
-0. Owner: first Cloudflare deploy (later). Done: language switch, menu flow, heroes, rename, in-game settings/help. NEXT: commit online, then antislop polish (antislop-human, antislop-ui, antislop-copywriting), then level + upgrade list, leaderboard on D1.
+0. Owner: first Cloudflare deploy (later). Done: language switch, menu flow, heroes, rename, in-game settings/help. NEXT: commit (levels, sound, online, polish are all uncommitted), then fix the antislop audit findings, then leaderboard on D1 (antislop-human, antislop-ui, antislop-copywriting), then level + upgrade list, leaderboard on D1.
 
 ## Older next steps
 1. Playtest the 3D version at /play (and /play2d), note feel problems.
