@@ -39,6 +39,8 @@ export interface RunResult {
   score: number;
   wave: number;
   kills: number;
+  /** Team level reached. */
+  level: number;
   durationMs: number;
   map: string;
 }
@@ -63,6 +65,8 @@ export const ClientMsgSchema = z.discriminatedUnion("t", [
     swap: z.boolean(),
     /** Counts weapon-swap key presses, so a tap shorter than one input interval is not lost. */
     taps: z.number().int().min(0).max(2_000_000_000),
+    /** Direct weapon pick for one input (0..9 = keys 1..9, 0). Omitted when no number key was pressed. */
+    sel: z.number().int().min(0).max(9).optional(),
   }),
   z.object({ t: z.literal("ping"), n: z.number().int().min(0).max(2_000_000_000) }),
   z.object({ t: z.literal("leave") }),

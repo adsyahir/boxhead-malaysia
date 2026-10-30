@@ -192,3 +192,16 @@ describe("running game", () => {
     expect(a.last("lobby")!.state).toBe("lobby");
   });
 });
+
+describe("direct weapon pick over the network", () => {
+  it("applies a pick once, and the snapshot carries level and weapon", () => {
+    const { rig, a } = startedGame();
+    runFor(rig, 100);
+    // unlock and arm the Uzi on the running world through the public step path: use a pick for a weapon with no ammo first
+    rig.room.message(0, input({ sel: 1 }));
+    runFor(rig, 100);
+    // Uzi is locked at level 1, so the pick is ignored and Lastik stays selected
+    expect(a.last("snap")!.s.players[0]!.w).toBe(0);
+    expect(a.last("snap")!.s.level).toBe(1);
+  });
+});

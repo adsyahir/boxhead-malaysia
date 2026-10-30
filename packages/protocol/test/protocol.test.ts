@@ -11,6 +11,7 @@ describe("parseClientMsg", () => {
       { t: "map", map: "kebun-getah" },
       { t: "start" },
       { t: "input", seq: 1, mx: -1, my: 0.5, fire: true, swap: false, taps: 3 },
+      { t: "input", seq: 2, mx: 0, my: 0, fire: false, swap: false, taps: 3, sel: 9 },
       { t: "ping", n: 7 },
       { t: "leave" },
     ];
@@ -24,6 +25,7 @@ describe("parseClientMsg", () => {
     ["unknown map", JSON.stringify({ t: "map", map: "../../etc" })],
     ["input out of range", JSON.stringify({ t: "input", seq: 1, mx: 5, my: 0, fire: false, swap: false, taps: 0 })],
     ["input NaN as null", JSON.stringify({ t: "input", seq: 1, mx: null, my: 0, fire: false, swap: false, taps: 0 })],
+    ["weapon pick out of range", JSON.stringify({ t: "input", seq: 1, mx: 0, my: 0, fire: false, swap: false, taps: 0, sel: 10 })],
     ["negative seq", JSON.stringify({ t: "input", seq: -1, mx: 0, my: 0, fire: false, swap: false, taps: 0 })],
     ["name too long", JSON.stringify({ t: "hello", name: "x".repeat(41) })],
     ["binary frame", new ArrayBuffer(4)],
@@ -57,6 +59,7 @@ describe("snapshot codec", () => {
     expect(dst.phase).toBe(src.phase);
     expect(dst.over).toBe(src.over);
     expect(dst.unlocked).toEqual(src.unlocked);
+    expect(dst.level).toBe(src.level);
     expect(dst.enemies).toHaveLength(src.enemies.length);
     expect(dst.projectiles).toHaveLength(src.projectiles.length);
     src.players.forEach((p, i) => {
@@ -113,5 +116,24 @@ describe("interpolate", () => {
   it("new entities appear at their snapshot position", () => {
     const fresh = { ...b, enemies: [[99999, 0, 10, 20, 55, 55, 0, 0]] };
     expect(interpolate(a, fresh, 0.3).enemies[0]).toEqual([99999, 0, 10, 20, 55, 55, 0, 0]);
+  });
+});
+
+describe("progression over the wire", () => {
+  it("carries the level, all ten weapons and the new charge pack", () => {
+    const src = createWorld({ seed: 3, map: createBoxMap(60, 40), playerCount: 2 });
+    src.level = 77;
+    src.unlocked = ["lastik", "railgun", "chargepack"];
+    src.players[0]!.weapon = "railgun";
+    src.players[0]!.ammo.railgun = 12;
+    src.placeables.push({ id: 5, kind: "charge", x: 100, y: 120, radius: 10, hp: 1, arm: 0, fuse: 1.2 });
+    const snap = JSON.parse(JSON.stringify(snapshotWorld(src)));
+    const dst = createWorld({ seed: 1, map: createBoxMap(60, 40), playerCount: 2 });
+    applySnapshot(dst, snap);
+    expect(dst.level).toBe(77);
+    expect(dst.unlocked).toEqual(["lastik", "railgun", "chargepack"]);
+    expect(dst.players[0]).toMatchObject({ weapon: "railgun" });
+    expect(dst.players[0]!.ammo.railgun).toBe(12);
+    expect(dst.placeables[0]).toMatchObject({ kind: "charge", fuse: 1.2 });
   });
 });

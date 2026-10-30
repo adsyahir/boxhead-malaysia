@@ -29,6 +29,7 @@ export interface Snapshot {
   phase: 0 | 1;
   breakTimer: number;
   unlocked: number[];
+  level: number;
   queue: number;
   over: boolean;
   players: SnapPlayer[];
@@ -44,7 +45,7 @@ export interface Snapshot {
 
 const ENEMY_KINDS: EnemyKind[] = ["pocong", "toyol", "pontianak"];
 const PROJECTILE_KINDS: ProjectileKind[] = ["bullet", "pellet", "rocket", "fireball", "grenade"];
-const PLACEABLE_KINDS: PlaceableKind[] = ["barricade", "barrel", "mine"];
+const PLACEABLE_KINDS: PlaceableKind[] = ["barricade", "barrel", "mine", "charge"];
 const PICKUP_KINDS: PickupKind[] = ["ammo", "ketupat", "crate"];
 
 const r1 = (n: number): number => Math.round(n * 10) / 10;
@@ -61,6 +62,7 @@ export function snapshotWorld(w: World): Snapshot {
     phase: w.phase === "wave" ? 1 : 0,
     breakTimer: r3(w.breakTimer),
     unlocked: w.unlocked.map((id) => WEAPON_IDS.indexOf(id)),
+    level: w.level,
     queue: w.queue.length,
     over: w.over,
     players: w.players.map((p) => ({
@@ -95,6 +97,7 @@ export function applySnapshot(w: World, s: Snapshot): void {
   w.phase = s.phase === 1 ? "wave" : "break";
   w.breakTimer = s.breakTimer;
   w.unlocked = s.unlocked.map((i) => WEAPON_IDS[i]).filter((x): x is WeaponId => x !== undefined);
+  w.level = s.level;
   w.over = s.over;
   // The HUD counts queued enemies; the client has no queue, so mirror its length.
   w.queue = new Array<EnemyKind>(s.queue).fill("pocong");

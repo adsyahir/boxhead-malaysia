@@ -4,7 +4,7 @@ import { SnapshotBuffer, type Snapshot } from "../src";
 
 function snap(tick: number, x: number): Snapshot {
   return {
-    tick, time: tick / 60, score: 0, kills: 0, combo: 1, wave: 1, phase: 1, breakTimer: 0, unlocked: [0], queue: 0, over: false,
+    tick, time: tick / 60, score: 0, kills: 0, combo: 1, wave: 1, phase: 1, breakTimer: 0, unlocked: [0], level: 1, queue: 0, over: false,
     players: [{ x, y: 100, hp: 100, alive: true, away: false, fx: 1, fy: 0, w: 0, ammo: -1 }],
     enemies: [], projectiles: [], placeables: [], pickups: [],
   };

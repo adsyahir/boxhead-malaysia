@@ -65,6 +65,8 @@ interface Seat {
   swap: boolean;
   taps: number;
   tapsDone: number;
+  /** A direct weapon pick (keys 1 to 0) waiting for the next tick; applied once. */
+  pendingSelect: number | undefined;
   lastSwitch: boolean;
   /** Message budget, refilled over time, so a flooding client is dropped. */
   bucket: number;
@@ -136,7 +138,7 @@ export class RoomLogic {
     const hero = HERO_IDS.find((h) => !taken.has(h)) ?? "abu";
     const seat: Seat = {
       name: trimmed, hero, ready: false, token: this.d.token(), conn, lostAt: null,
-      mx: 0, my: 0, fire: false, swap: false, taps: 0, tapsDone: 0, lastSwitch: false,
+      mx: 0, my: 0, fire: false, swap: false, taps: 0, tapsDone: 0, pendingSelect: undefined, lastSwitch: false,
       bucket: BUCKET_MAX, bucketAt: this.d.now(),
     };
     this.seats[free] = seat;
@@ -211,6 +213,7 @@ export class RoomLogic {
         seat.fire = msg.fire;
         seat.swap = msg.swap;
         if (msg.taps > seat.taps) seat.taps = msg.taps;
+        if (msg.sel !== undefined) seat.pendingSelect = msg.sel;
         return;
       case "leave":
         this.leave(slot);
@@ -271,6 +274,7 @@ export class RoomLogic {
       if (!s) continue;
       s.ready = false;
       s.taps = s.tapsDone = 0;
+      s.pendingSelect = undefined;
       s.lastSwitch = false;
       s.mx = s.my = 0;
       s.fire = s.swap = false;
@@ -294,7 +298,9 @@ export class RoomLogic {
         sw = true;
       }
       s.lastSwitch = sw;
-      return { moveX: s.mx, moveY: s.my, fire: s.fire, switchWeapon: sw };
+      const select = s.pendingSelect;
+      s.pendingSelect = undefined;
+      return { moveX: s.mx, moveY: s.my, fire: s.fire, switchWeapon: sw, ...(select !== undefined ? { select } : {}) };
     });
   }
 
@@ -336,7 +342,7 @@ export class RoomLogic {
     const w = this.world;
     if (!w) return;
     this.state = "over";
-    const run = { score: w.score, wave: Math.max(1, w.wave), kills: w.kills, durationMs: Math.round((this.d.now() - this.startedAt)), map: this.map };
+    const run = { score: w.score, wave: Math.max(1, w.wave), kills: w.kills, level: w.level, durationMs: Math.round((this.d.now() - this.startedAt)), map: this.map };
     for (const s of this.seats) s?.conn?.send({ t: "over", run });
     this.world = null;
     this.notify();
