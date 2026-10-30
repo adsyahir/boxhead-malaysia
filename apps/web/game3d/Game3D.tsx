@@ -1,22 +1,42 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { ROOM_CODE_RE, type ErrorCode, type MapId, type RoomListing, type Slot } from "@kampung/protocol";
 import { audio } from "../game/audio/audio";
 import { CHARACTERS, DEFAULT_CHARACTERS, type Character } from "../game/characters";
-import type { RunSummary } from "../game/constants";
+import { NICK_KEY, type RunSummary } from "../game/constants";
 import type { HudState } from "../game/hud-state";
 import { isTouchDevice } from "../game/input/touch-state";
 import { MAPS } from "../game/maps";
 import type { Engine, SceneName } from "./engine/engine";
+import type { Key } from "../i18n";
 import { useSettings, useT } from "../settings/react";
+import { createRoom, listRooms } from "./net/api";
+import { OnlineClient, type LinkStatus, type LobbyView } from "./net/client";
 import Hud from "./ui/Hud";
+import { Lobby, OnlineMenu, nameIsValid } from "./ui/OnlineScreens";
 import { CharacterSelect, Credits, GameOver, HowToPlay, MapSelect, Menu, ModeSelect, SettingsScreen } from "./ui/Screens";
 import TouchControls from "./ui/TouchControls";
 
 const TOAST_MS = 1600;
 
 /** UI screens. Only MapSelect, Game and GameOver have their own engine scene; the rest sit over the menu backdrop. */
-type Screen = "Menu" | "Mode" | "Character" | "MapSelect" | "Settings" | "Help" | "Credits" | "Game" | "GameOver";
+type Screen = "Menu" | "Mode" | "Character" | "MapSelect" | "Online" | "Lobby" | "Settings" | "Help" | "Credits" | "Game" | "GameOver";
+
+const ERROR_KEY: Record<ErrorCode, Key> = {
+  bad_message: "errGeneric",
+  no_room: "errNoRoom",
+  room_full: "errFull",
+  bad_name: "errBadName",
+  not_host: "errGeneric",
+  not_ready: "errGeneric",
+  in_progress: "errInProgress",
+  rate_limited: "errRate",
+  busy: "errBusy",
+};
+
+/** After these the server has closed the connection and the seat is gone. */
+const FINAL_ERRORS: ErrorCode[] = ["no_room", "room_full", "bad_name", "in_progress"];
 
 function engineScene(s: Screen): SceneName {
   return s === "MapSelect" || s === "Game" || s === "GameOver" ? s : "Menu";
@@ -32,6 +52,8 @@ export default function Game3D() {
   const floatLayer = useRef<HTMLDivElement>(null);
   const engine = useRef<Engine | null>(null);
   const pendingStart = useRef<{ key: string; players: 1 | 2; characters: Character[] } | null>(null);
+  /** A room start that arrived before the 3D engine finished loading; replayed once it exists. */
+  const pendingOnline = useRef<{ map: MapId; heroes: Character[]; you: Slot } | null>(null);
   const t = useT();
   const { muted, quality } = useSettings();
   /** Graphics quality is applied by rebuilding the engine, so it waits until you are out of a run. */
@@ -68,6 +90,23 @@ export default function Game3D() {
   const [ending, setEnding] = useState(false);
   const [run, setRun] = useState<RunSummary | null>(null);
   const [touch, setTouch] = useState(false);
+
+  // ---- online ----
+  const netRef = useRef<OnlineClient | null>(null);
+  const [lobby, setLobby] = useState<{ view: LobbyView; you: Slot } | null>(null);
+  const [linkStatus, setLinkStatus] = useState<LinkStatus>("idle");
+  const [netError, setNetError] = useState<Key | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [nick, setNick] = useState("");
+  const [rooms, setRooms] = useState<RoomListing[] | null | undefined>(undefined);
+  const [prefill, setPrefill] = useState("");
+  /** The run in progress belongs to a room. A shared game cannot be paused, so its menu just overlays it. */
+  const [isOnline, setIsOnline] = useState(false);
+  const isOnlineRef = useRef(false);
+  isOnlineRef.current = isOnline;
+  const [onlineMenu, setOnlineMenu] = useState(false);
+  const onlineMenuRef = useRef(false);
+  onlineMenuRef.current = onlineMenu;
 
   const go = useCallback((s: Screen) => {
     screenRef.current = s;
@@ -119,6 +158,8 @@ export default function Game3D() {
 
   const toMenu = useCallback(() => {
     setConfirmExit(false);
+    setOnlineMenu(false);
+    setIsOnline(false);
     setOverlay(null);
     setHud(null);
     setRun(null);
@@ -130,9 +171,149 @@ export default function Game3D() {
   /** Pause the run and ask before throwing it away. */
   const requestExit = useCallback(() => {
     if (screenRef.current !== "Game") return;
-    if (hudRef.current && !hudRef.current.paused) engine.current?.togglePause();
+    if (isOnlineRef.current) setOnlineMenu(true);
+    else if (hudRef.current && !hudRef.current.paused) engine.current?.togglePause();
     setConfirmExit(true);
   }, []);
+
+  const dropNet = useCallback(() => {
+    netRef.current?.close();
+    netRef.current = null;
+    setLobby(null);
+    setLinkStatus("idle");
+    setIsOnline(false);
+    setOnlineMenu(false);
+  }, []);
+
+  /** Leave the room for good (gives up the seat) and go to the menu. */
+  const leaveRoomToMenu = useCallback(() => {
+    netRef.current?.leave();
+    dropNet();
+    toMenu();
+  }, [dropNet, toMenu]);
+
+  const startOnlineGame = useCallback(
+    (s: { map: MapId; heroes: Character[]; you: Slot }) => {
+      const link = netRef.current;
+      if (!link) return;
+      toastQueue.current = [];
+      setToast(null);
+      setConfirmExit(false);
+      setOverlay(null);
+      setOnlineMenu(false);
+      setEnding(false);
+      setRun(null);
+      setHud(null);
+      setCharacters(s.heroes);
+      setIsOnline(true);
+      go("Game");
+      const e = engine.current;
+      if (!e) {
+        pendingOnline.current = s;
+        return;
+      }
+      void e.startOnline(s.map, s.heroes, s.you, link).then(() => {
+        if (screenRef.current === "Game") e.setSceneName("Game");
+      });
+    },
+    [go],
+  );
+
+  const connect = useCallback(
+    (code: string, name: string) => {
+      netRef.current?.close();
+      setNetError(null);
+      setBusy(true);
+      const client = new OnlineClient({
+        onStatus: setLinkStatus,
+        onLobby: (view, you) => {
+          setLobby({ view, you });
+          setBusy(false);
+          const s = screenRef.current;
+          if (s === "Online" || (s === "GameOver" && view.state === "lobby")) go("Lobby");
+        },
+        onStart: (st) => {
+          if (screenRef.current !== "Game") startOnlineGame(st);
+        },
+        onOver: (r) => engine.current?.endOnlineRun(r),
+        onError: (code2, _msg) => {
+          setNetError(ERROR_KEY[code2]);
+          setBusy(false);
+          if (FINAL_ERRORS.includes(code2)) {
+            dropNet();
+            if (screenRef.current === "Lobby" || screenRef.current === "Online") go("Online");
+          }
+        },
+      });
+      netRef.current = client;
+      client.connect(code, name);
+    },
+    [dropNet, go, startOnlineGame],
+  );
+
+  const saveNick = useCallback((n: string) => {
+    setNick(n);
+    try {
+      localStorage.setItem(NICK_KEY, n);
+    } catch {
+      /* not remembered */
+    }
+  }, []);
+
+  const createAndJoin = useCallback(
+    async (isPublic: boolean) => {
+      if (!nameIsValid(nick)) return;
+      setBusy(true);
+      setNetError(null);
+      const r = await createRoom(isPublic);
+      if (!r.ok) {
+        setBusy(false);
+        setNetError(r.error === "rate_limited" ? "errRate" : r.error === "busy" ? "errBusy" : "errOffline");
+        return;
+      }
+      connect(r.code, nick.trim());
+    },
+    [connect, nick],
+  );
+
+  const joinRoom = useCallback(
+    (code: string) => {
+      if (!nameIsValid(nick) || !ROOM_CODE_RE.test(code)) return;
+      connect(code, nick.trim());
+    },
+    [connect, nick],
+  );
+
+  const refreshRooms = useCallback(async () => {
+    setRooms(await listRooms());
+  }, []);
+
+  // remembered nickname, and ?room=ABCD links
+  useEffect(() => {
+    try {
+      setNick(localStorage.getItem(NICK_KEY) ?? "");
+    } catch {
+      /* none */
+    }
+    const code = (new URLSearchParams(window.location.search).get("room") ?? "").toUpperCase();
+    if (ROOM_CODE_RE.test(code)) {
+      setPrefill(code);
+      go("Online");
+    }
+    return () => {
+      netRef.current?.close();
+      netRef.current = null;
+    };
+  }, [go]);
+
+  // keep the public room list fresh while the Online screen is open
+  useEffect(() => {
+    if (screen !== "Online") return;
+    setRooms(undefined);
+    void refreshRooms();
+    const id = setInterval(() => void refreshRooms(), 4000);
+    return () => clearInterval(id);
+  }, [screen, refreshRooms]);
 
   const toBoard = useCallback(() => {
     window.location.href = "/leaderboard";
@@ -168,7 +349,14 @@ export default function Game3D() {
       instance.setSceneName(screenRef.current === "Game" ? "MapSelect" : engineScene(screenRef.current));
       const p = pendingStart.current;
       pendingStart.current = null;
-      if (p) {
+      const po = pendingOnline.current;
+      pendingOnline.current = null;
+      if (po && netRef.current) {
+        const link = netRef.current;
+        void instance.startOnline(po.map, po.heroes, po.you, link).then(() => {
+          if (screenRef.current === "Game") instance?.setSceneName("Game");
+        });
+      } else if (p) {
         void instance.startGame(p.key, p.players, p.characters).then(() => {
           if (screenRef.current === "Game") instance?.setSceneName("Game");
         });
@@ -221,6 +409,13 @@ export default function Game3D() {
     } else go("Mode");
   }, [go]);
 
+  /** Leave the lobby (gives up the seat) and return to the join screen. */
+  const leaveToOnlineMenu = useCallback(() => {
+    netRef.current?.leave();
+    dropNet();
+    go("Online");
+  }, [dropNet, go]);
+
   // keyboard shortcuts for the menus and pause/mute
   useEffect(() => {
     const digit = (code: string): number => {
@@ -237,12 +432,14 @@ export default function Game3D() {
           setOverlay(null);
           return;
         }
-        const back: Partial<Record<Screen, Screen>> = { Mode: "Menu", MapSelect: "Character", Settings: "Menu", Help: "Menu", Credits: "Menu" };
+        const back: Partial<Record<Screen, Screen>> = { Mode: "Menu", MapSelect: "Character", Online: "Mode", Settings: "Menu", Help: "Menu", Credits: "Menu" };
         const to = back[s];
         if (s === "Character") backFromCharacter();
+        else if (s === "Lobby") leaveToOnlineMenu();
         else if (to) go(to);
         else if (s === "Game") {
-          if (confirmRef.current) setConfirmExit(false); // Esc on the warning keeps you in the game, still paused
+          if (confirmRef.current) setConfirmExit(false); // Esc on the warning keeps you in the game
+          else if (isOnlineRef.current) setOnlineMenu((v) => !v);
           else engine.current?.togglePause();
         }
         return;
@@ -260,13 +457,17 @@ export default function Game3D() {
       } else if (s === "Mode") {
         if (d === 1) pickMode(1);
         else if (d === 2 && !isTouchDevice()) pickMode(2);
+        else if (d === 3) go("Online");
       } else if (s === "Character") {
         const hero = CHARACTERS[d - 1];
         if (hero) pickCharacter(hero);
       } else if (s === "MapSelect") {
         if (d >= 1 && MAPS[d - 1]) startGame(MAPS[d - 1]!.key, playersRef.current, charactersRef.current);
       } else if (s === "Game") {
-        if (ev.code === "KeyP" && !confirmRef.current) engine.current?.togglePause();
+        if (ev.code === "KeyP" && !confirmRef.current) {
+          if (isOnlineRef.current) setOnlineMenu((v) => !v);
+          else engine.current?.togglePause();
+        }
       }
     };
     const unlock = () => audio.unlock();
@@ -276,7 +477,7 @@ export default function Game3D() {
       window.removeEventListener("keydown", onKey);
       window.removeEventListener("pointerdown", unlock);
     };
-  }, [backFromCharacter, go, pickCharacter, pickMode, startGame, toggleMute]);
+  }, [backFromCharacter, go, leaveToOnlineMenu, pickCharacter, pickMode, startGame, toggleMute]);
 
   return (
     <div className="game-root g3d-root">
@@ -285,24 +486,51 @@ export default function Game3D() {
       {screen === "Game" && touch && !ending && <TouchControls />}
       {screen === "Game" && hud && (
         <Hud
-          hud={hud}
+          hud={isOnline ? { ...hud, paused: onlineMenu } : hud}
+          online={isOnline}
           touch={touch}
           toast={toast}
           muted={muted}
           onMute={toggleMute}
-          onPause={() => engine.current?.togglePause()}
+          onPause={() => (isOnline ? setOnlineMenu((v) => !v) : engine.current?.togglePause())}
           onExit={requestExit}
           onHelp={() => setOverlay("Help")}
           onSettings={() => setOverlay("Settings")}
           confirmExit={confirmExit}
           onCancelExit={() => setConfirmExit(false)}
-          onConfirmExit={toMenu}
+          onConfirmExit={isOnline ? leaveRoomToMenu : toMenu}
         />
       )}
       {screen === "Menu" && (
         <Menu touch={touch} onStart={() => go("Mode")} onHelp={() => go("Help")} onSettings={() => go("Settings")} onBoard={toBoard} onCredits={() => go("Credits")} />
       )}
-      {screen === "Mode" && <ModeSelect touch={touch} onPick={pickMode} onBack={() => go("Menu")} />}
+      {screen === "Mode" && <ModeSelect touch={touch} onPick={pickMode} onOnline={() => go("Online")} onBack={() => go("Menu")} />}
+      {screen === "Online" && (
+        <OnlineMenu
+          name={nick}
+          onName={saveNick}
+          busy={busy}
+          error={netError}
+          rooms={rooms}
+          prefillCode={prefill}
+          onCreate={(pub) => void createAndJoin(pub)}
+          onJoin={joinRoom}
+          onRefresh={() => void refreshRooms()}
+          onBack={() => go("Mode")}
+        />
+      )}
+      {screen === "Lobby" && lobby && (
+        <Lobby
+          view={lobby.view}
+          you={lobby.you}
+          error={netError}
+          onHero={(h) => netRef.current?.send({ t: "hero", hero: h })}
+          onReady={(r) => netRef.current?.send({ t: "ready", ready: r })}
+          onMap={(m) => netRef.current?.send({ t: "map", map: m })}
+          onStart={() => netRef.current?.send({ t: "start" })}
+          onLeave={leaveToOnlineMenu}
+        />
+      )}
       {screen === "Character" && (
         <CharacterSelect touch={touch} players={players} slot={slot} taken={slot === 1 ? firstPick : null} onPick={pickCharacter} onBack={backFromCharacter} />
       )}
@@ -323,12 +551,27 @@ export default function Game3D() {
       {screen === "Help" && <HowToPlay touch={touch} onBack={() => go("Menu")} />}
       {screen === "Credits" && <Credits onBack={() => go("Menu")} />}
       {screen === "GameOver" && run && (
-        <GameOver run={run} onAgain={() => startGame(run.map, run.mode === "2p" ? 2 : 1, characters)} onMenu={toMenu} onBoard={toBoard} />
+        <GameOver
+          run={run}
+          onAgain={() => (run.mode === "online" ? netRef.current?.send({ t: "ready", ready: false }) : startGame(run.map, run.mode === "2p" ? 2 : 1, characters))}
+          onMenu={run.mode === "online" ? leaveRoomToMenu : toMenu}
+          onBoard={toBoard}
+        />
       )}
       {screen !== "Game" && (
         <button type="button" className="g3d-icon g3d-mute-float" onClick={toggleMute} aria-label={muted ? t("unmute") : t("mute")}>
           {muted ? "🔇" : "🔊"}
         </button>
+      )}
+      {(isOnline || screen === "Lobby") && (screen === "Game" || screen === "GameOver" || screen === "Lobby") && linkStatus !== "open" && linkStatus !== "idle" && (
+        <div className={`g3d-conn${linkStatus === "closed" ? " dead" : ""}`} role="alert">
+          <span>{linkStatus === "closed" ? t("disconnected") : linkStatus === "connecting" ? t("connecting") : t("reconnecting")}</span>
+          {linkStatus === "closed" && (
+            <button type="button" className="g3d-btn slim" onClick={leaveRoomToMenu}>
+              {t("menu")}
+            </button>
+          )}
+        </div>
       )}
       <div className={`g3d-fade${ending ? " on" : ""}`} />
       <div className="rotate-prompt" role="alert">

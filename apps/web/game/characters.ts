@@ -2,8 +2,11 @@
  * Playable heroes. Purely cosmetic: every hero has identical stats (see core balance.ts).
  * `accent` tints the HUD card, the ground halo and the 2P marker; `look` feeds the select-screen figure.
  */
-export const CHARACTERS = ["abu", "siti", "ahmeng", "meiling", "muthu", "kavitha", "hamid", "kiah"] as const;
-export type Character = (typeof CHARACTERS)[number];
+import { HERO_IDS, type HeroId } from "@kampung/protocol";
+
+/** The ids are shared with the online server, which validates them. */
+export const CHARACTERS = HERO_IDS;
+export type Character = HeroId;
 
 export const DEFAULT_CHARACTERS: Character[] = ["abu", "siti"];
 

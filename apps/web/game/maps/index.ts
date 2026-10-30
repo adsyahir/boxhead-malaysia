@@ -1,4 +1,5 @@
 import type { MapData, Vec } from "@kampung/game-core";
+import { tiledToMapData } from "@kampung/protocol";
 
 export interface MapInfo {
   key: string;
@@ -45,18 +46,8 @@ export function parseTiledMap(json: TiledMap): LoadedMap {
   };
   const points = (name: string): Vec[] => (layer(name).objects ?? []).map((o) => ({ x: o.x, y: o.y }));
 
-  const collision = layer("collision");
-  const solid = (collision.data ?? []).map((g) => (g > 0 ? 1 : 0));
-  const data: MapData = {
-    cols: json.width,
-    rows: json.height,
-    tileSize: json.tilewidth,
-    solid,
-    spawns: points("spawns"),
-    playerStarts: points("playerStart"),
-  };
-  if (data.spawns.length === 0) throw new Error("Map has no spawn points");
-  if (data.playerStarts.length === 0) throw new Error("Map has no player start");
+  // Walls, spawns and starts come from the shared parser so the online server agrees with this client.
+  const data: MapData = tiledToMapData(json);
   return {
     data,
     ground: layer("ground").data ?? [],

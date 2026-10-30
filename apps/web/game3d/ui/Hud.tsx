@@ -17,6 +17,8 @@ interface Props {
   onHelp(): void;
   onSettings(): void;
   confirmExit: boolean;
+  /** A shared room: the menu cannot pause the game. */
+  online?: boolean;
   onCancelExit(): void;
   onConfirmExit(): void;
 }
@@ -41,7 +43,7 @@ function PlayerCard({ p, side, index }: { p: HudState["players"][number]; side: 
   );
 }
 
-export default function Hud({ hud, touch, toast, muted, onMute, onPause, onExit, onHelp, onSettings, confirmExit, onCancelExit, onConfirmExit }: Props) {
+export default function Hud({ hud, touch, toast, muted, onMute, onPause, onExit, onHelp, onSettings, confirmExit, online = false, onCancelExit, onConfirmExit }: Props) {
   const t = useT();
   return (
     <div className="g3d-hud">
@@ -84,7 +86,8 @@ export default function Hud({ hud, touch, toast, muted, onMute, onPause, onExit,
       )}
       {hud.paused && !confirmExit && (
         <div className="g3d-pause">
-          <div className="g3d-pause-title">{t("paused")}</div>
+          <div className="g3d-pause-title">{online ? t("onlineMenuTitle") : t("paused")}</div>
+          {online && <div className="g3d-pause-hint">{t("onlineMenuNote")}</div>}
           <div className="g3d-pause-actions">
             <button type="button" className="g3d-btn primary" onClick={onPause}>
               {t("resume")}
@@ -106,7 +109,7 @@ export default function Hud({ hud, touch, toast, muted, onMute, onPause, onExit,
         <div className="g3d-pause g3d-confirm" role="alertdialog" aria-labelledby="leave-title" aria-describedby="leave-body">
           <div className="g3d-confirm-box">
             <h2 id="leave-title">{t("leaveTitle")}</h2>
-            <p id="leave-body">{t("leaveBody")}</p>
+            <p id="leave-body">{online ? t("leaveBodyOnline") : t("leaveBody")}</p>
             <div className="g3d-confirm-actions">
               <button type="button" className="g3d-btn primary" onClick={onCancelExit} autoFocus>
                 {t("leaveCancel")}

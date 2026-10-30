@@ -10,5 +10,5 @@ export interface RunSummary {
   kills: number;
   durationMs: number;
   map: string;
-  mode: "1p" | "2p";
+  mode: "1p" | "2p" | "online";
 }

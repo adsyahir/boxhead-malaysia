@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { createWorld, type GameEvent, type PlayerInput, type World } from "@kampung/game-core";
+import { applySnapshot, type RunResult, type Slot } from "@kampung/protocol";
 import type { RunSummary } from "../../game/constants";
 import { advance, newRunSeed } from "../../game/fixed-step";
 import { DEFAULT_CHARACTERS, type Character } from "../../game/characters";
@@ -8,6 +9,7 @@ import { getSettings } from "../../settings/store";
 import { isTouchDevice, sampleTouch } from "../../game/input/touch-state";
 import { parseTiledMap, type LoadedMap } from "../../game/maps";
 import { WindowKeyboard } from "../input/keyboard";
+import type { OnlineClient } from "../net/client";
 import { UNIT_BOX, UNIT_QUAD } from "./batch";
 import { CameraRig } from "./camera";
 import { toX, toZ } from "./coords";
@@ -64,6 +66,8 @@ export class Engine {
   private mapKey = "kampung-pisang";
   private playerCount: 1 | 2 = 1;
   private keyboard: WindowKeyboard | null = null;
+  /** Set while playing a room: the world is rebuilt from server snapshots instead of simulated here. */
+  private online: { link: OnlineClient; you: Slot; taps: number } | null = null;
   private acc = 0;
   private paused = false;
   private ended = false;
@@ -170,8 +174,47 @@ export class Engine {
     this.publishHud();
   }
 
+  /** Play a room: render the server's world. Input goes to the server; nothing is simulated locally. */
+  async startOnline(key: string, heroes: Character[], you: Slot, link: OnlineClient): Promise<void> {
+    const my = ++this.token;
+    const ok = await this.useMap(key);
+    if (!ok || my !== this.token || !this.built) return;
+    this.endRun();
+    this.mapKey = key;
+    this.playerCount = 2;
+    setActiveCharacters(heroes);
+    this.view.setCharacters(heroes);
+    // The seed is irrelevant: every field the renderer reads is overwritten from snapshots.
+    this.world = createWorld({ seed: 1, map: this.built.loaded.data, playerCount: 2 });
+    this.online = { link, you, taps: 0 };
+    this.acc = 0;
+    this.paused = false;
+    this.ended = false;
+    this.frames = 0;
+    if (!this.touch) this.keyboard = new WindowKeyboard(1);
+    const me = this.world.players[you]!;
+    this.cam.snap(toX(me.x), toZ(me.y));
+    this.mode = "game";
+    this.canvas.dataset.tick = "0";
+    this.publishHud();
+  }
+
+  /** The server says the run is over. */
+  endOnlineRun(run: RunResult): void {
+    if (this.ended) return;
+    this.ended = true;
+    this.cb.onEnding();
+    this.endTimer = setTimeout(() => {
+      this.endTimer = null;
+      this.mode = "over";
+      this.keyboard?.destroy();
+      this.keyboard = null;
+      this.cb.onGameOver({ ...run, mode: "online" });
+    }, 1100);
+  }
+
   togglePause(): void {
-    if (this.mode !== "game" || this.ended) return;
+    if (this.mode !== "game" || this.ended || this.online) return; // a shared online game cannot be paused
     this.paused = !this.paused;
     this.keyboard?.sample();
     this.publishHud();
@@ -233,6 +276,7 @@ export class Engine {
     this.endTimer = null;
     this.keyboard?.destroy();
     this.keyboard = null;
+    this.online = null;
     this.world = null;
     this.paused = false;
     this.ended = false;
@@ -254,6 +298,10 @@ export class Engine {
 
   private focusPoints(): { x: number; z: number }[] {
     if (!this.world) return [];
+    if (this.online) {
+      const me = this.world.players[this.online.you];
+      if (me?.alive) return [{ x: toX(me.x), z: toZ(me.y) }];
+    }
     const alive = this.world.players.filter((p) => p.alive);
     const list = alive.length > 0 ? alive : this.world.players;
     return list.map((p) => ({ x: toX(p.x), z: toZ(p.y) }));
@@ -293,7 +341,8 @@ export class Engine {
     const world = this.world!;
     const sampled = this.sampleInputs();
     let events: GameEvent[] = [];
-    if (!this.paused && !this.ended) ({ acc: this.acc, events } = advance(world, sampled, this.acc, frameDt));
+    if (this.online) events = this.stepOnline(world, sampled, nowMs);
+    else if (!this.paused && !this.ended) ({ acc: this.acc, events } = advance(world, sampled, this.acc, frameDt));
     this.fx.handle(events, world, nowMs);
     for (const e of events) if (e.type === "gameOver") this.finish(e);
 
@@ -303,7 +352,23 @@ export class Engine {
       d.tick = String(world.tick);
       d.players = world.players.map((p) => `${Math.round(p.x)},${Math.round(p.y)}`).join("|");
       d.ms = this.cpuMs.toFixed(2);
+      if (this.online) d.slot = String(this.online.you);
     }
+  }
+
+  /** Send our input, then show the server's world as it was ~100 ms ago, blended between two snapshots. */
+  private stepOnline(world: World, sampled: { inputs: PlayerInput[]; swapTapped: boolean[] }, nowMs: number): GameEvent[] {
+    const o = this.online!;
+    const mine = sampled.inputs[0];
+    if (mine && !this.ended) {
+      if (sampled.swapTapped[0]) o.taps++;
+      o.link.sendInput({ mx: mine.moveX, my: mine.moveY, fire: mine.fire, swap: mine.switchWeapon, taps: o.taps }, nowMs);
+    }
+    const out = o.link.buffer.sample(nowMs);
+    if (!out) return [];
+    applySnapshot(world, out.snap);
+    // gameOver arrives as its own message; ignore the in-world copy so the UI hears it once.
+    return out.events.filter((e) => e.type !== "gameOver");
   }
 
   private ambient(dt: number): void {

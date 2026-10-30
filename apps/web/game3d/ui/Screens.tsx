@@ -67,7 +67,7 @@ export function Menu(props: {
   );
 }
 
-export function ModeSelect({ touch, onPick, onBack }: { touch: boolean; onPick(n: 1 | 2): void; onBack(): void }) {
+export function ModeSelect({ touch, onPick, onOnline, onBack }: { touch: boolean; onPick(n: 1 | 2): void; onOnline(): void; onBack(): void }) {
   const t = useT();
   return (
     <div className="g3d-screen">
@@ -84,8 +84,9 @@ export function ModeSelect({ touch, onPick, onBack }: { touch: boolean; onPick(n
             {t("twoPlayers")} <small>({t("twoPlayersHint")})</small>
           </button>
         )}
-        <button type="button" className="g3d-btn" disabled>
-          {t("online")} <small>({t("comingSoon")})</small>
+        <button type="button" className="g3d-btn" onClick={onOnline}>
+          {!touch && <span className="g3d-keycap">{3}</span>}
+          {t("online")}
         </button>
       </div>
       {!touch && <p className="g3d-help">{t("modeHint")}</p>}
@@ -356,6 +357,7 @@ export function Credits({ onBack }: { onBack(): void }) {
 }
 
 export function GameOver({ run, onAgain, onMenu, onBoard }: { run: RunSummary; onAgain(): void; onMenu(): void; onBoard(): void }) {
+  const online = run.mode === "online";
   const t = useT();
   const secs = Math.round(run.durationMs / 1000);
   return (
@@ -375,14 +377,16 @@ export function GameOver({ run, onAgain, onMenu, onBoard }: { run: RunSummary; o
       </dl>
       <div className="g3d-buttons">
         <button type="button" className="g3d-btn primary" onClick={onAgain}>
-          {t("playAgain")}
+          {online ? t("backToRoom") : t("playAgain")}
         </button>
         <button type="button" className="g3d-btn" onClick={onMenu}>
           {t("menu")}
         </button>
-        <button type="button" className="g3d-btn" onClick={onBoard}>
-          {t("leaderboard")}
-        </button>
+        {!online && (
+          <button type="button" className="g3d-btn" onClick={onBoard}>
+            {t("leaderboard")}
+          </button>
+        )}
       </div>
     </div>
   );
