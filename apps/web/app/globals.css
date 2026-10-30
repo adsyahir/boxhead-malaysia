@@ -135,7 +135,7 @@ a { color: inherit; }
   background: rgba(8, 10, 20, 0.55); border: 1px solid rgba(255, 255, 255, 0.1); border-left: 4px solid #5aa0ff;
 }
 .g3d-pcard.left { left: 10px; }
-.g3d-pcard.right { right: 110px; border-left-color: #ff7ab8; }
+.g3d-pcard.right { right: 110px; }
 .g3d-pcard.down { opacity: 0.7; border-left-color: #a03030; }
 .g3d-pname { font-weight: 700; font-size: 14px; }
 .g3d-hp { margin: 5px 0; height: 10px; background: rgba(0, 0, 0, 0.7); border-radius: 3px; overflow: hidden; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12); }
@@ -194,3 +194,89 @@ a { color: inherit; }
   .g3d-buttons { gap: 8px; }
   .g3d-stats { font-size: 1rem; gap: 2px 18px; }
 }
+
+/* ---- main menu flow, settings, help, credits ---- */
+.g3d-keycap {
+  display: inline-grid; place-items: center; min-width: 1.5em; height: 1.5em; margin-right: 0.7em; padding: 0 0.3em;
+  border: 1px solid currentColor; border-radius: 4px; font-size: 0.8em; opacity: 0.7;
+}
+.g3d-btn small { opacity: 0.7; font-weight: 400; }
+.g3d-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.g3d-btn:disabled:hover { background: inherit; }
+.g3d-btn.slim { padding: 8px 18px; min-width: 0; }
+.g3d-menu-foot { display: flex; align-items: center; gap: 18px; margin-top: 4px; }
+.g3d-link { color: var(--muted); font-size: 0.85rem; text-underline-offset: 3px; text-shadow: 0 1px 3px #000; }
+.g3d-link:hover, .g3d-link:focus-visible { color: var(--fg); }
+
+.lang-switch { display: inline-flex; border: 2px solid #41598f; border-radius: 8px; overflow: hidden; background: rgba(20, 28, 50, 0.8); }
+.lang-switch button {
+  font: inherit; color: var(--muted); background: transparent; border: 0; padding: 6px 14px; cursor: pointer; font-weight: 700;
+}
+.lang-switch button.on { background: var(--accent); color: #2a1600; }
+.lang-switch button:not(.on):hover, .lang-switch button:focus-visible { background: rgba(58, 80, 136, 0.9); color: #fff; outline: none; }
+.page-lang { position: absolute; top: 14px; right: 14px; }
+
+.g3d-panel {
+  width: min(560px, 100%); padding: 18px 20px; background: rgba(14, 20, 38, 0.86); border: 2px solid #41598f; border-radius: 10px;
+  backdrop-filter: blur(5px); text-align: left;
+}
+.g3d-settings { display: flex; flex-direction: column; gap: 14px; }
+.g3d-row { display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap; }
+.g3d-row.end { justify-content: flex-end; margin-top: 4px; }
+.g3d-row input[type="range"] { flex: 1; min-width: 120px; accent-color: var(--accent); }
+.g3d-row output { min-width: 3.2em; text-align: right; color: #b8c8e0; }
+.g3d-row select {
+  font: inherit; color: var(--fg); background: #1c2640; border: 2px solid #41598f; border-radius: 6px; padding: 6px 10px;
+}
+.g3d-chip {
+  font: inherit; color: var(--fg); background: #1c2640; border: 2px solid #41598f; border-radius: 6px; padding: 6px 14px; cursor: pointer;
+}
+.g3d-chip.on { background: #2f6a3c; border-color: #58b070; }
+.g3d-chip:hover, .g3d-chip:focus-visible { border-color: var(--accent); outline: none; }
+.g3d-note { margin: 0; color: #8a9bb8; font-size: 0.8rem; line-height: 1.5; }
+
+.g3d-scroll { justify-content: flex-start; overflow-y: auto; padding-top: 64px; padding-bottom: 32px; }
+.g3d-doc h3 { margin: 16px 0 6px; color: var(--accent); font-size: 1rem; }
+.g3d-doc h3:first-child { margin-top: 0; }
+.g3d-doc p, .g3d-doc li { margin: 4px 0; font-size: 0.9rem; line-height: 1.55; color: #d4def0; }
+.g3d-doc ul { margin: 0; padding-left: 1.2em; }
+.g3d-doc.center { text-align: center; }
+.g3d-keys { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+.g3d-keys th, .g3d-keys td { padding: 5px 8px; border-bottom: 1px solid #2b3a66; text-align: left; }
+.g3d-keys th { color: var(--accent); }
+.g3d-weapons { list-style: none; margin: 0; padding: 0; }
+.g3d-weapons li { display: flex; justify-content: space-between; border-bottom: 1px solid #243251; padding: 3px 0; }
+
+.g3d-heroes { max-width: 960px; gap: 12px; }
+.g3d-char { width: 200px; min-height: 0; padding: 12px 10px; gap: 6px; justify-content: flex-start; }
+.g3d-char:not(:disabled):hover, .g3d-char:not(:disabled):focus-visible { border-color: var(--accent-hero, var(--accent)); }
+.g3d-char.taken { opacity: 0.4; cursor: not-allowed; }
+.g3d-figure { position: relative; width: 48px; height: 66px; display: block; margin: 2px 0; }
+.g3d-figure .head { position: absolute; left: 12px; top: 0; width: 24px; height: 22px; border-radius: 5px; background: var(--skin); box-shadow: inset 0 8px 0 var(--hair); }
+.g3d-figure.covered .head { box-shadow: inset 0 0 0 5px var(--hair); }
+.g3d-figure .body { position: absolute; left: 5px; top: 24px; width: 38px; height: 40px; border-radius: 5px; background: linear-gradient(var(--top) 68%, var(--bottom) 68%); }
+@media (max-width: 700px), (max-height: 480px) {
+  .g3d-char { width: calc(50% - 8px); min-width: 140px; }
+  .g3d-char .g3d-card-blurb { display: block; font-size: 0.72rem; }
+}
+@media (min-width: 641px) and (max-width: 900px) {
+  .g3d-pcard { width: 172px; }
+  .g3d-pcard.right { right: 100px; }
+}
+
+/* ---- pause menu and leave-game confirmation ---- */
+.g3d-pause { pointer-events: auto; flex-direction: column; gap: 14px; }
+.g3d-pause-actions { display: flex; flex-direction: column; gap: 10px; min-width: min(260px, 80vw); margin-top: 8px; }
+.g3d-pause-hint { color: #9fb4d0; font-size: 0.85rem; }
+.g3d-confirm { background: rgba(0, 0, 0, 0.72); z-index: 7; }
+.g3d-confirm-box {
+  width: min(460px, calc(100vw - 32px)); padding: 22px; text-align: center; background: #141c32; border: 2px solid #b8503a;
+  border-radius: 10px; box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6); text-shadow: none;
+}
+.g3d-confirm-box h2 { margin: 0 0 10px; color: #ffb09a; font-size: 1.3rem; }
+.g3d-confirm-box p { margin: 0 0 18px; color: #d4def0; line-height: 1.5; font-size: 0.95rem; }
+.g3d-confirm-actions { display: flex; flex-direction: column; gap: 10px; }
+.g3d-btn.danger { background: #8a2a22; border-color: #d0584a; color: #fff; }
+.g3d-btn.danger:hover, .g3d-btn.danger:focus-visible { background: #a8352c; }
+
+.g3d-ingame > .g3d-screen { background: rgba(5, 6, 14, 0.94); }

@@ -1,5 +1,6 @@
 "use client";
 
+import { useT } from "../../settings/react";
 import { useEffect, useRef, useState } from "react";
 import { STICK_RADIUS, applyStick, resetTouchState, touchState } from "../../game/input/touch-state";
 
@@ -11,6 +12,7 @@ interface Btn {
 
 /** Virtual joystick (left half) plus Tembak and Tukar buttons (bottom-right), as DOM pointer events. */
 export default function TouchControls() {
+  const t = useT();
   const layer = useRef<HTMLDivElement>(null);
   const ids = useRef({ stick: -1, fire: -1, swap: -1 });
   /** Stick origin lives in a ref so a move that arrives before React re-renders still has it. */
@@ -111,10 +113,10 @@ export default function TouchControls() {
           <div className="g3d-stick" style={{ left: base.x, top: base.y, width: STICK_RADIUS * 2, height: STICK_RADIUS * 2 }} />
           <div className="g3d-knob" style={{ left: knob.x, top: knob.y }} />
           <div className={`g3d-tbtn fire${pressed.fire ? " on" : ""}`} style={{ left: fireBtn.x, top: fireBtn.y, width: fireBtn.r * 2, height: fireBtn.r * 2 }}>
-            Tembak
+            {t("fire")}
           </div>
           <div className={`g3d-tbtn swap${pressed.swap ? " on" : ""}`} style={{ left: swapBtn.x, top: swapBtn.y, width: swapBtn.r * 2, height: swapBtn.r * 2 }}>
-            Tukar
+            {t("swap")}
           </div>
         </>
       )}
