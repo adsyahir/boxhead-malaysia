@@ -34,7 +34,7 @@ function spawnEnemy(w: World, kind: EnemyKind, at: Vec): void {
 function reviveDowned(w: World, ev: GameEvent[]): void {
   const c = { x: (w.map.cols * w.map.tileSize) / 2, y: (w.map.rows * w.map.tileSize) / 2 };
   w.players.forEach((p, i) => {
-    if (p.alive) return;
+    if (p.alive || p.away) return;
     const start = w.map.playerStarts[i % w.map.playerStarts.length] ?? c;
     p.alive = true;
     p.hp = BALANCE.reviveHp;

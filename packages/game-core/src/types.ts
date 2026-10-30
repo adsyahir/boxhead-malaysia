@@ -35,6 +35,8 @@ export interface Player {
   ammo: Record<WeaponId, number>;
   cooldown: number;
   prevSwitch: boolean;
+  /** Disconnected (online). An away player is downed and is not revived until they return. */
+  away: boolean;
 }
 
 export interface Enemy {

@@ -34,6 +34,7 @@ function createPlayer(id: number, map: MapData): Player {
     ammo,
     cooldown: 0,
     prevSwitch: false,
+    away: false,
   };
 }
 
@@ -65,6 +66,21 @@ export function createWorld(opts: WorldOptions): World {
   };
   buildFlow(w);
   return w;
+}
+
+/**
+ * Mark a player as gone (online disconnect) or back. A leaver is downed on the spot and skipped by revive;
+ * a returning player stays downed until the next wave starts, like any downed hero.
+ */
+export function setPlayerAway(world: World, slot: number, away: boolean): void {
+  const p = world.players[slot];
+  if (!p) return;
+  p.away = away;
+  if (away) {
+    p.alive = false;
+    p.hp = 0;
+    p.cooldown = 0;
+  }
 }
 
 /** Advance the simulation one tick. Mutates `world` in place and returns what happened. */
