@@ -9,7 +9,7 @@ export default defineConfig({
     channel: "chrome",
   },
   webServer: {
-    command: process.env.CI ? "pnpm build && pnpm exec wrangler dev --port 3100" : "pnpm exec next dev -p 3100",
+    command: process.env.CI ? "npx next build && npx wrangler dev --port 3100" : "npx next dev -p 3100",
     url: "http://localhost:3100",
     reuseExistingServer: true,
     timeout: 180_000,
