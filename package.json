@@ -5,6 +5,9 @@
   "scripts": {
     "lint": "pnpm -r lint",
     "typecheck": "pnpm -r typecheck",
-    "test": "pnpm -r test"
+    "test": "pnpm -r test",
+    "build:web": "pnpm --filter @kampung/web build",
+    "deploy": "pnpm --filter @kampung/web build && pnpm --filter @kampung/server deploy",
+    "dev:online": "pnpm --filter @kampung/server dev"
   }
 }

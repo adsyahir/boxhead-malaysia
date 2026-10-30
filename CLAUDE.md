@@ -12,10 +12,12 @@ Bare `pnpm` is a broken shim on this machine. Always use `corepack pnpm` (pinned
 corepack pnpm install
 corepack pnpm lint
 corepack pnpm typecheck
-corepack pnpm test                                   # game-core vitest, 68 tests
+corepack pnpm test                                   # game-core 72, protocol 29, server 25
 corepack pnpm --filter @kampung/web dev              # http://localhost:3000/play
 cd apps/web && corepack pnpm exec next build
-cd apps/web && CI= corepack pnpm exec playwright test   # smoke test, uses installed Chrome, dev server on :3100
+cd apps/web && CI= corepack pnpm exec playwright test   # 9 tests; starts next dev :3100 + the Worker :8787 itself; uses installed Chrome
+corepack pnpm dev:online                             # online server on :8787 (run build:web once first)
+corepack pnpm deploy                                 # build site + deploy the Worker (needs wrangler login)
 corepack pnpm --filter @kampung/web maps             # regenerate tiles.png + 3 Tiled JSON maps
 ```
 
@@ -35,7 +37,9 @@ apps/web             Next 15 App Router + client
   public/maps/       tiles.png + kampung-pisang / kebun-getah / tanah-perkuburan .json (generated)
   scripts/generate-maps.mjs   generates the maps; gid meanings are in this file
   e2e/smoke.spec.ts  Playwright smoke test (relies on canvas data-scene / data-tick / data-players)
-packages/db          (not created yet) Prisma
+packages/protocol    messages, snapshot codec + playback buffer, Tiled parser (shared by server and web)
+apps/server          Cloudflare Worker: serves the site AND online rooms (RoomDO, LobbyDO); pure logic in room-logic.ts / lobby-logic.ts
+packages/db          (dropped: leaderboard will use D1)
 infra/CLOUDFLARE.md  deploy guide. Hosting is Cloudflare only (static site now; D1 + Durable Objects later). No VPS.
 ```
 
@@ -51,6 +55,9 @@ Coordinates: core is 2D pixels (map 60x40 tiles of 32 px = 1920x1280). Renderers
 Done and committed on `main` (pushed to https://github.com/adsyahir/boxhead-malaysia): M0-M3. Monorepo, full `game-core` (3 enemies, 8 weapons, pickups, flow field with barricades, waves, combo, revive, game over), `validateRun`. 68 tests pass.
 
 Done but NOT committed (branch `feat/v1-phaser-client`, nothing has been committed since M3): M4, the Phaser client in `apps/web`: menu, map select, 3 generated maps, HUD, night lighting, camera (2P zoom), particles/shake, synthesised WebAudio SFX (mute on M, saved in localStorage), keyboard 1P/2P and touch controls, rotate prompt, Playwright smoke test. Verified: typecheck, lint, tests, next build, e2e, manual run of all 3 maps with no console errors. Not verified: touch on a real device, 2P camera feel, feel of all 8 weapons (needs a human playtest).
+
+### Online rooms (built, uncommitted)
+Start -> Mode -> Online: create a public/private room (4-letter code) or join by code or from the public list; lobby (hero, map by host, ready, start); 2 players; no login (nickname only, remembered). Server-authoritative: `apps/server` runs game-core per room in a Durable Object, clients send input and render snapshots (20 Hz, interpolated 100 ms behind). A dropped player is downed and can rejoin (token in sessionStorage, 30 s) at the next wave. Game cannot be paused online (Esc opens a menu over the running game). On phones the mode screen shows only 1 Player and Online. Locally: `corepack pnpm dev:online` (worker on :8787) + web dev server; page finds the worker itself. Tests: core 72, protocol 29, server 25 (fake sockets, fake clock), Playwright 9 incl. a two-browser online test. Verified by hand: scripted second client against the real local Worker, host in the browser pane. NOT yet verified: deploying it, two real devices over the internet, phone touch in a room, long games, prediction (input latency is about one round trip plus ~100 ms).
 
 ### Menu flow, settings, language, heroes (built, uncommitted)
 Game is now **Hantu Kampung Pisang** (renamed 2026-10-31; enemies are Malaysian ghosts). Home `/` is the 3D main menu: Mula -> Mode (1P / 2P / Online soon) -> Hero -> Map. 8 cosmetic heroes (Abu, Siti, Ah Meng, Mei Ling, Muthu, Kavitha, Pak Cik Hamid, Mak Cik Kiah; table in `game/characters.ts`, rigs via `person()` in `game3d/engine/rigs.ts`); in 2P player 1 then player 2 pick. Malay/English switch (`i18n/`, `settings/store.ts`, localStorage `kpp-settings`); Settings, How to Play, Credits screens; pause menu offers Resume, How to Play, Settings, Exit (Exit asks for confirmation). 6 Playwright tests. Phaser `/play2d` menus remain Malay-only. Only Abu/Siti/Ah Meng/Mei Ling were checked visually in-game; Muthu, Kavitha, Hamid, Kiah render with no console errors but were not looked at yet.
@@ -76,7 +83,7 @@ Known gaps: no human playtest of feel/frame rate yet (the browser pane throttles
 - Fable (claude-fable-5-1) needs usage credits in the Claude desktop app. The owner wants to use it from the Claude Code terminal.
 
 ## Next steps (owner's order, 2026-10-31)
-0. Owner: first Cloudflare deploy (later). Done: language switch, menu flow, heroes, rename, in-game settings/help. NEXT: online rooms (2 players, code + public list, Durable Objects; on mobile only 1 Player + Online), then antislop polish (antislop-human, antislop-ui, antislop-copywriting), then level + upgrade list, leaderboard on D1.
+0. Owner: first Cloudflare deploy (later). Done: language switch, menu flow, heroes, rename, in-game settings/help. NEXT: commit online, then antislop polish (antislop-human, antislop-ui, antislop-copywriting), then level + upgrade list, leaderboard on D1.
 
 ## Older next steps
 1. Playtest the 3D version at /play (and /play2d), note feel problems.

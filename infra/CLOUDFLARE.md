@@ -1,25 +1,27 @@
 # Deploying to Cloudflare (no VPS)
 
-Everything runs on Cloudflare's edge, so there is no server of your own to crash.
+Everything runs on Cloudflare's edge, so there is no server of your own to crash. One Worker (`hantu-kampung-pisang`,
+code in `apps/server`) serves the static website and also runs the online rooms.
 
 | Part | Where | Status |
 |---|---|---|
-| Website and game (static export of `apps/web`) | Cloudflare Workers static assets | ready |
-| Leaderboard API + database | Worker + D1 (SQLite) | planned |
-| Online rooms (no login) | Worker + Durable Objects, one per room | planned |
+| Website and game (static export of `apps/web`) | Worker static assets | ready |
+| Online rooms (no login, 2 players, code or public list) | Durable Objects: one `RoomDO` per room, one `LobbyDO` registry | ready, tested locally |
+| Leaderboard + database | Worker + D1 (SQLite) | planned |
 
 ## One-time setup (you do this, it needs your Cloudflare login)
 
 1. Make a free account at https://dash.cloudflare.com/sign-up.
 2. Log in from the terminal (opens your browser):
    ```bash
-   corepack pnpm --filter @kampung/web exec wrangler login
+   cd apps/server && npx wrangler login
    ```
-3. First deploy:
+3. First deploy (builds the site, then publishes the Worker with its Durable Objects):
    ```bash
-   corepack pnpm --filter @kampung/web deploy
+   corepack pnpm deploy
    ```
-   It prints your URL, like `https://hantu-kampung-pisang.<your-subdomain>.workers.dev`. Open it and play.
+   It prints your URL, like `https://hantu-kampung-pisang.<your-subdomain>.workers.dev`. Open it and play. Open it on a
+   second device, create a room on one and join from the other with the 4-letter code.
 
 ## Custom domain (optional)
 
@@ -35,15 +37,26 @@ Add your domain to Cloudflare (Websites, Add a domain), then Workers & Pages, ha
 
 Never commit the token. It only lives in GitHub secrets.
 
-## Local checks
+## Local development
 
 ```bash
-corepack pnpm --filter @kampung/web build      # writes apps/web/out (static export)
-corepack pnpm --filter @kampung/web preview    # serves it through the real Workers runtime on :3100
+corepack pnpm --filter @kampung/web dev     # pages on http://localhost:3000 (hot reload)
+corepack pnpm dev:online                    # online server on http://localhost:8787 (needs apps/web/out: run build:web once)
 ```
+
+On `localhost` the page finds the Worker on :8787 by itself. `corepack pnpm build:web && corepack pnpm dev:online` also serves the
+whole site from :8787, exactly like production.
+
+## How online play works (for debugging)
+
+- `POST /api/rooms {public}` creates a room and returns a 4-letter code; `GET /api/rooms` lists open public rooms.
+- `GET /ws?room=CODE` upgrades to a websocket owned by that room's Durable Object, which runs the real game (`game-core`)
+  at 60 Hz and sends snapshots at 20 Hz. Clients only send their input.
+- A dropped player is downed and can rejoin with the token the browser keeps for 30 seconds, coming back at the next wave.
+- Limits: 5 rooms per minute per IP, 2 players per room, 500 live rooms, 120-message burst per player, messages over 2 KB dropped.
 
 ## Notes
 
 - Caching: `apps/web/public/_headers` sets immutable caching for `/_next/static/*` and a day for `/maps/*`.
-- A 404 returns `404.html`. Config is `apps/web/wrangler.jsonc`.
-- Free plan limits apply (Workers requests per day). The game itself is static files, so normal play barely touches them.
+- Free-plan limits apply (requests per day, Durable Object duration while a room is being played). See Cloudflare's Durable Objects pricing page before sharing the link widely.
+- The server bundles the three Tiled maps at build time, so server and client always agree on walls and spawns.

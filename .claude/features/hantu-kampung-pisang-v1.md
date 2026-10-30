@@ -191,3 +191,8 @@ Tests: 5 Playwright tests (3D run, 2D run, language persists across reload, menu
 3b. DONE: pause menu has How to Play and Settings (quality change applies after leaving the run).
 4. After everything: run the antislop skills (antislop-human, antislop-ui, antislop-copywriting) over UI/copy.
 5. Earlier: level + upgrade list (table above), leaderboard on D1, deploy (owner later).
+
+## Online rooms: done (2026-10-31, uncommitted)
+Built as planned, on Cloudflare (no VPS): `packages/protocol` (zod-validated messages, compact snapshots, playback buffer, shared Tiled parser), `apps/server` (Worker + `RoomDO` + `LobbyDO`; pure `RoomLogic`/`LobbyLogic` unit-tested with fake sockets), core `away` flag (leaver downed, skipped by revive, rejoins next wave), client net layer + Online/Lobby screens + engine online mode. Site and API are one Worker (`apps/server/wrangler.jsonc`, assets from `apps/web/out`, `run_worker_first` for `/ws` and `/api/*`); `apps/web/wrangler.jsonc` removed.
+Decisions: 2 players; join by code or public list; nickname only; server at 60 Hz, snapshots 20 Hz, clients render 100 ms in the past; no client prediction yet; no pause online; mobile shows 1 Player + Online only (2P-on-one-device already hidden on touch); a start that arrives before the 3D engine loads is replayed (this race caused a real e2e flake, fixed).
+Not done / ideas: client-side prediction for own player, leaderboard submission by the server (trustworthy scores), chat/emotes, 3-4 players, kick/ban, spectators, rematch voting.

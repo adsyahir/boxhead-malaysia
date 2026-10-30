@@ -8,11 +8,45 @@ importers:
 
   .: {}
 
+  apps/server:
+    dependencies:
+      '@kampung/game-core':
+        specifier: workspace:*
+        version: link:../../packages/game-core
+      '@kampung/protocol':
+        specifier: workspace:*
+        version: link:../../packages/protocol
+    devDependencies:
+      '@cloudflare/workers-types':
+        specifier: ^5.20261030.1
+        version: 5.20261030.1
+      '@eslint/js':
+        specifier: ^9.0.0
+        version: 9.39.5
+      eslint:
+        specifier: ^9.0.0
+        version: 9.39.5
+      typescript:
+        specifier: ^5.6.0
+        version: 5.9.3
+      typescript-eslint:
+        specifier: ^8.0.0
+        version: 8.72.1(eslint@9.39.5)(typescript@5.9.3)
+      vitest:
+        specifier: ^2.1.0
+        version: 2.1.9(@types/node@22.20.5)
+      wrangler:
+        specifier: ^4.0.0
+        version: 4.156.0(@cloudflare/workers-types@5.20261030.1)(@types/node@22.20.5)
+
   apps/web:
     dependencies:
       '@kampung/game-core':
         specifier: workspace:*
         version: link:../../packages/game-core
+      '@kampung/protocol':
+        specifier: workspace:*
+        version: link:../../packages/protocol
       next:
         specifier: ^15.1.0
         version: 15.5.28(@playwright/test@1.64.1)(@types/node@22.20.5)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
@@ -56,9 +90,6 @@ importers:
       typescript-eslint:
         specifier: ^8.0.0
         version: 8.72.1(eslint@9.39.5)(typescript@5.9.3)
-      wrangler:
-        specifier: ^4.156.0
-        version: 4.156.0(@types/node@22.20.5)
 
   packages/game-core:
     devDependencies:
@@ -68,6 +99,31 @@ importers:
       '@vitest/coverage-v8':
         specifier: ^2.1.0
         version: 2.1.9(vitest@2.1.9(@types/node@22.20.5))
+      eslint:
+        specifier: ^9.0.0
+        version: 9.39.5
+      typescript:
+        specifier: ^5.6.0
+        version: 5.9.3
+      typescript-eslint:
+        specifier: ^8.0.0
+        version: 8.72.1(eslint@9.39.5)(typescript@5.9.3)
+      vitest:
+        specifier: ^2.1.0
+        version: 2.1.9(@types/node@22.20.5)
+
+  packages/protocol:
+    dependencies:
+      '@kampung/game-core':
+        specifier: workspace:*
+        version: link:../game-core
+      zod:
+        specifier: ^3.23.8
+        version: 3.25.76
+    devDependencies:
+      '@eslint/js':
+        specifier: ^9.0.0
+        version: 9.39.5
       eslint:
         specifier: ^9.0.0
         version: 9.39.5
@@ -149,6 +205,9 @@ packages:
     engines: {node: '>=16'}
     cpu: [x64]
     os: [win32]
+
+  '@cloudflare/workers-types@5.20261030.1':
+    resolution: {integrity: sha512-oKHewMzKBtXq3dWiYL9GpHFnBfg8juBOir9PPREMPT8G2MHotAxIBIQ2w1rpO1xCN9etRlAxJaeoQbMGSlXqlQ==}
 
   '@cspotcode/source-map-support@0.8.1':
     resolution: {integrity: sha512-IchNf6dN4tHoMFIn/7OE8LWZ19Y6q/67Bmf6vnGREv8RSbBVb9LPJxEcnwrcwX6ixSvaiGoomAUvu4YSxXrVgw==}
@@ -1814,6 +1873,9 @@ packages:
   youch@4.1.0-beta.10:
     resolution: {integrity: sha512-rLfVLB4FgQneDr0dv1oddCVZmKjcJ6yX6mS4pU82Mq/Dt9a3cLZQ62pDBL4AUO+uVrCvtWz3ZFUL2HFAFJ/BXQ==}
 
+  zod@3.25.76:
+    resolution: {integrity: sha512-gzUt/qt81nXsFGKIFcC3YnfEAx5NkunCfnDlvuBSSFS02bcXu4Lmea0AFIUwbLWxWPx3d9p8S5QoaujKcNQxcQ==}
+
 snapshots:
 
   '@ampproject/remapping@2.3.0':
@@ -1858,6 +1920,8 @@ snapshots:
 
   '@cloudflare/workerd-windows-64@1.20261023.1':
     optional: true
+
+  '@cloudflare/workers-types@5.20261030.1': {}
 
   '@cspotcode/source-map-support@0.8.1':
     dependencies:
@@ -3312,7 +3376,7 @@ snapshots:
       '@cloudflare/workerd-linux-arm64': 1.20261023.1
       '@cloudflare/workerd-windows-64': 1.20261023.1
 
-  wrangler@4.156.0(@types/node@22.20.5):
+  wrangler@4.156.0(@cloudflare/workers-types@5.20261030.1)(@types/node@22.20.5):
     dependencies:
       '@cloudflare/kv-asset-handler': 0.5.0
       '@cloudflare/unenv-preset': 2.16.2(unenv@2.0.0-rc.24)(workerd@1.20261023.1)
@@ -3323,6 +3387,7 @@ snapshots:
       unenv: 2.0.0-rc.24
       workerd: 1.20261023.1
     optionalDependencies:
+      '@cloudflare/workers-types': 5.20261030.1
       fsevents: 2.3.3
     transitivePeerDependencies:
       - '@types/node'
@@ -3357,3 +3422,5 @@ snapshots:
       '@speed-highlight/core': 1.2.24
       cookie: 1.1.1
       youch-core: 0.3.3
+
+  zod@3.25.76: {}
