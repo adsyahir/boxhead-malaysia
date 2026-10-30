@@ -2,7 +2,9 @@ import * as THREE from "three";
 import { createWorld, type GameEvent, type PlayerInput, type World } from "@kampung/game-core";
 import type { RunSummary } from "../../game/constants";
 import { advance, newRunSeed } from "../../game/fixed-step";
-import { buildHudState, type HudState } from "../../game/hud-state";
+import { DEFAULT_CHARACTERS, type Character } from "../../game/characters";
+import { buildHudState, setActiveCharacters, type HudState } from "../../game/hud-state";
+import { getSettings } from "../../settings/store";
 import { isTouchDevice, sampleTouch } from "../../game/input/touch-state";
 import { parseTiledMap, type LoadedMap } from "../../game/maps";
 import { WindowKeyboard } from "../input/keyboard";
@@ -75,13 +77,16 @@ export class Engine {
   private height = 1;
   private disposed = false;
   private cpuMs = 0;
+  private dprCap = 2;
 
   constructor(private readonly host: HTMLElement, overlay: HTMLElement, private readonly cb: EngineCallbacks) {
-    const quality: LightQuality = this.touch
+    const low = this.touch || getSettings().quality === "low";
+    this.dprCap = getSettings().quality === "low" ? 1 : 2;
+    const quality: LightQuality = low
       ? { lampLights: 3, dynamicLights: 2, shadows: false }
       : { lampLights: 6, dynamicLights: 4, shadows: true };
 
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const dpr = Math.min(window.devicePixelRatio || 1, this.dprCap);
     this.renderer = new THREE.WebGLRenderer({ antialias: dpr < 2, powerPreference: "high-performance" });
     this.renderer.setPixelRatio(dpr);
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -141,13 +146,15 @@ export class Engine {
     this.mode = "backdrop";
   }
 
-  async startGame(key: string, players: 1 | 2): Promise<void> {
+  async startGame(key: string, players: 1 | 2, characters: Character[] = DEFAULT_CHARACTERS): Promise<void> {
     const my = ++this.token;
     const ok = await this.useMap(key);
     if (!ok || my !== this.token || !this.built) return;
     this.endRun();
     this.mapKey = key;
     this.playerCount = players;
+    setActiveCharacters(characters);
+    this.view.setCharacters(characters);
     this.world = createWorld({ seed: newRunSeed(), map: this.built.loaded.data, playerCount: players });
     this.acc = 0;
     this.paused = false;
@@ -240,7 +247,7 @@ export class Engine {
     const h = Math.max(1, this.host.clientHeight);
     this.width = w;
     this.height = h;
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, this.dprCap));
     this.renderer.setSize(w, h);
     this.cam.resize(w, h);
   }

@@ -5,10 +5,10 @@ import { lerpAngle, toX, toZ, yawOf } from "./coords";
 import type { NightLights } from "./lights";
 import type { Materials } from "./materials";
 import type { Particles } from "./particles";
+import { DEFAULT_CHARACTERS, HEROES, characterIndex, type Character } from "../../game/characters";
 import { ENEMY_RIGS, PLAYER_RIGS, drawRig, neutralPose, type Pose } from "./rigs";
 
 const RISE_TIME = BALANCE.riseTime;
-const PLAYER_GLOW = [0x5aa0ff, 0xff7ab8];
 
 interface Anim {
   x: number;
@@ -39,7 +39,16 @@ function rootMatrix(out: THREE.Matrix4, x: number, y: number, z: number, yaw: nu
  * Mirrors World into instanced boxes every frame. Read-only towards the World, like the Phaser WorldView.
  * All actors, props, particles and HP bars share two box batches (lit + glow) plus two quad batches.
  */
+/** Scale a 0xRRGGBB colour toward black (halos should be a soft tint, not the full accent). */
+function dim(c: number, k: number): number {
+  const r = Math.round(((c >> 16) & 255) * k);
+  const g = Math.round(((c >> 8) & 255) * k);
+  const b = Math.round((c & 255) * k);
+  return (r << 16) | (g << 8) | b;
+}
+
 export class EntityView {
+  private characters: Character[] = DEFAULT_CHARACTERS;
   readonly group = new THREE.Group();
   readonly lit: BoxBatch;
   readonly glow: BoxBatch;
@@ -63,6 +72,11 @@ export class EntityView {
   flash(id: number, nowMs: number, ms = 90, player = false): void {
     const a = player ? this.playerAnim[id] : this.anim.get(id);
     if (a) a.flashUntil = nowMs + ms;
+  }
+
+  /** Which hero each player slot draws as. */
+  setCharacters(chars: Character[]): void {
+    this.characters = chars;
   }
 
   recoil(playerId: number): void {
@@ -174,13 +188,15 @@ export class EntityView {
       }
       const lie = -Math.PI / 2 * a.extra;
       rootMatrix(root, x, bob + a.extra * 0.14, z, a.yaw, lie);
+      const hero = this.characters[i] ?? DEFAULT_CHARACTERS[i % 2]!;
+      const ci = characterIndex(hero);
       const flash = nowMs < a.flashUntil ? 1 : 0;
-      drawRig(PLAYER_RIGS[i % 2]!, root, pose, this.lit, this.glow, { flash, shade: p.alive ? 1 : 0.55, held: p.alive ? p.weapon : undefined });
+      drawRig(PLAYER_RIGS[ci]!, root, pose, this.lit, this.glow, { flash, shade: p.alive ? 1 : 0.55, held: p.alive ? p.weapon : undefined });
       if (p.alive) {
         this.blob(x, z, 0.85);
-        this.halo(x, z, 2.2, i === 0 ? 0x24324a : 0x4a2438);
+        this.halo(x, z, 2.2, dim(HEROES[hero].accent, 0.28));
         if (two) {
-          const c = PLAYER_GLOW[i]!;
+          const c = HEROES[hero].accent;
           const hy = 1.42 + Math.sin(real * 4 + i) * 0.04;
           this.glow.box(c, x, hy, z, 0.14, 0.14, 0.14, Math.PI / 4, real * 2, Math.PI / 4);
         }

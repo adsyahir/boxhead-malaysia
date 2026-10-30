@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import type { EnemyKind, WeaponId } from "@kampung/game-core";
+import { CHARACTERS, HEROES, type Character } from "../../game/characters";
 import type { BoxBatch } from "./batch";
 
 /**
@@ -137,6 +138,116 @@ function siti(): RigDef {
   };
 }
 
+interface PersonOpts {
+  skin: number;
+  top: number;
+  bottom: number;
+  shoe: number;
+  sleeves: "long" | "short";
+  /** A skirt, sarung or long top drawn over the upper legs. */
+  skirt?: { color: number; length: number };
+  hair: "short" | "bun" | "braid" | "none";
+  hairColor: number;
+  hat?: { kind: "kopiah" | "cap" | "tudung"; color: number };
+  beard?: number;
+  glasses?: boolean;
+  bindi?: boolean;
+}
+
+/** Shared build for the extra heroes: same proportions and joints as Abu and Siti, different outfits. */
+function person(o: PersonOpts): RigDef {
+  const legL: PartDef[] = [
+    { g: G.LegL, c: o.bottom, p: [-0.085, 0.2, 0], s: [0.14, 0.34, 0.16] },
+    { g: G.LegL, c: o.shoe, p: [-0.085, 0.03, 0.025], s: [0.15, 0.06, 0.2] },
+  ];
+  const armL: PartDef[] =
+    o.sleeves === "long"
+      ? [
+          { g: G.ArmL, c: o.top, p: [-0.26, 0.54, 0], s: [0.12, 0.34, 0.14] },
+          { g: G.ArmL, c: o.skin, p: [-0.26, 0.35, 0], s: [0.11, 0.08, 0.12] },
+        ]
+      : [
+          { g: G.ArmL, c: o.top, p: [-0.26, 0.63, 0], s: [0.125, 0.16, 0.15] },
+          { g: G.ArmL, c: o.skin, p: [-0.26, 0.45, 0], s: [0.11, 0.2, 0.12] },
+        ];
+  const parts: PartDef[] = [
+    ...legL,
+    ...mirror(legL, G.LegR),
+    { g: G.Body, c: o.top, p: [0, 0.55, 0], s: [0.4, 0.4, 0.24] },
+    ...armL,
+    ...mirror(armL, G.ArmR),
+    { g: G.Head, c: o.skin, p: [0, 0.9, 0], s: [0.31, 0.3, 0.3] },
+    { g: G.Head, c: 0x1b120c, p: [-0.07, 0.91, 0.151], s: [0.05, 0.06, 0.01] },
+    { g: G.Head, c: 0x1b120c, p: [0.07, 0.91, 0.151], s: [0.05, 0.06, 0.01] },
+    { g: G.Head, c: 0x8a4a38, p: [0, 0.82, 0.151], s: [0.08, 0.02, 0.01] },
+  ];
+  if (o.skirt) {
+    const h = o.skirt.length;
+    parts.push({ g: G.Body, c: o.skirt.color, p: [0, 0.4 - h / 2 + 0.1, 0], s: [0.4, h, 0.27] });
+  }
+  if (o.hair !== "none") {
+    parts.push(
+      { g: G.Head, c: o.hairColor, p: [0, 1.07, -0.01], s: [0.33, 0.12, 0.31] },
+      { g: G.Head, c: o.hairColor, p: [0, 0.97, -0.1], s: [0.32, 0.22, 0.1] },
+    );
+    if (o.hair === "bun") {
+      parts.push(
+        { g: G.Head, c: o.hairColor, p: [-0.14, 1.17, -0.02], s: [0.1, 0.1, 0.1] },
+        { g: G.Head, c: o.hairColor, p: [0.14, 1.17, -0.02], s: [0.1, 0.1, 0.1] },
+      );
+    }
+    if (o.hair === "braid") {
+      parts.push({ g: G.Body, c: o.hairColor, p: [0, 0.55, -0.16], s: [0.07, 0.5, 0.07] });
+    }
+  }
+  if (o.hat?.kind === "kopiah") parts.push({ g: G.Head, c: o.hat.color, p: [0, 1.1, 0], s: [0.32, 0.11, 0.3] });
+  if (o.hat?.kind === "cap") {
+    parts.push(
+      { g: G.Head, c: o.hat.color, p: [0, 1.1, 0], s: [0.34, 0.1, 0.32] },
+      { g: G.Head, c: o.hat.color, p: [0, 1.04, 0.18], s: [0.28, 0.02, 0.12] },
+    );
+  }
+  if (o.hat?.kind === "tudung") {
+    parts.push(
+      { g: G.Body, c: o.hat.color, p: [0, 0.74, 0], s: [0.42, 0.12, 0.29] },
+      { g: G.Head, c: o.hat.color, p: [0, 0.95, -0.03], s: [0.34, 0.37, 0.3] },
+      { g: G.Head, c: o.hat.color, p: [0, 1.08, 0.04], s: [0.32, 0.08, 0.24] },
+    );
+  }
+  if (o.beard !== undefined) parts.push({ g: G.Head, c: o.beard, p: [0, 0.79, 0.12], s: [0.22, 0.1, 0.1] });
+  if (o.glasses) {
+    parts.push(
+      { g: G.Head, c: 0x3a2a20, p: [-0.075, 0.915, 0.154], s: [0.1, 0.075, 0.01] },
+      { g: G.Head, c: 0x3a2a20, p: [0.075, 0.915, 0.154], s: [0.1, 0.075, 0.01] },
+      { g: G.Head, c: 0x3a2a20, p: [0, 0.92, 0.154], s: [0.04, 0.02, 0.01] },
+    );
+  }
+  if (o.bindi) parts.push({ g: G.Head, c: 0xd02030, p: [0, 0.99, 0.152], s: [0.03, 0.03, 0.01] });
+  return { hip: 0.36, shoulder: 0.7, shoulderX: 0.26, neck: 0.74, arm: 0.4, parts };
+}
+
+const RIG_BUILDERS: Record<Character, () => RigDef> = {
+  abu,
+  siti,
+  ahmeng: () =>
+    person({ ...look("ahmeng"), shoe: 0xe8e8e8, sleeves: "short", hair: "short", hairColor: 0x15110d, hat: { kind: "cap", color: 0x2a4a8a } }),
+  meiling: () =>
+    person({ ...look("meiling"), shoe: 0xf0f0f0, sleeves: "short", bottom: 0xe6bf9a, skirt: { color: 0x2a6a80, length: 0.18 }, hair: "bun", hairColor: 0x15110d }),
+  muthu: () => person({ ...look("muthu"), shoe: 0x2a1a10, sleeves: "long", hair: "short", hairColor: 0x15110d }),
+  kavitha: () =>
+    person({ ...look("kavitha"), shoe: 0x4a2a14, sleeves: "long", skirt: { color: 0x2e8a52, length: 0.34 }, hair: "braid", hairColor: 0x15110d, bindi: true }),
+  hamid: () =>
+    person({ ...look("hamid"), shoe: 0x2a1a10, sleeves: "long", skirt: { color: 0x6a3a2a, length: 0.32 }, hair: "none", hairColor: 0xf2f2f2, hat: { kind: "kopiah", color: 0xf4f0e6 }, beard: 0xd8d8d8 }),
+  kiah: () =>
+    person({ ...look("kiah"), shoe: 0x3a1a20, sleeves: "long", skirt: { color: 0x5a2a6a, length: 0.32 }, hair: "none", hairColor: 0x000000, hat: { kind: "tudung", color: 0xd8c0e8 }, glasses: true }),
+};
+
+/** Outfit colours come from the shared hero table so the select screen and the 3D model always match. */
+function look(c: Character): { skin: number; top: number; bottom: number } {
+  const l = HEROES[c].look;
+  return { skin: l.skin, top: l.top, bottom: l.bottom };
+}
+
 // ---------- enemies ----------
 function pocong(): RigDef {
   const kain = 0xe9e4d4;
@@ -229,7 +340,8 @@ function pontianak(): RigDef {
   };
 }
 
-export const PLAYER_RIGS: Rig[] = [compile(abu()), compile(siti())];
+/** Indexed by `characterIndex`. */
+export const PLAYER_RIGS: Rig[] = CHARACTERS.map((c) => compile(RIG_BUILDERS[c]()));
 export const ENEMY_RIGS: Record<EnemyKind, Rig> = {
   pocong: compile(pocong()),
   toyol: compile(toyol()),
