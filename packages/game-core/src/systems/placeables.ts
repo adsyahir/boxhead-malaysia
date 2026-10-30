@@ -1,6 +1,6 @@
-import { WEAPONS, PLACEABLE } from "../data/weapons";
+import { PLACEABLE } from "../data/weapons";
 import type { GameEvent, World } from "../types";
-import { explode } from "./combat";
+import { explodeWeapon } from "./combat";
 
 export function updatePlaceables(w: World, dt: number, ev: GameEvent[]): void {
   // Index loop: a barrel explosion can push new fuses onto other barrels mid-pass.
@@ -11,7 +11,14 @@ export function updatePlaceables(w: World, dt: number, ev: GameEvent[]): void {
       b.fuse -= dt;
       if (b.fuse <= 0) {
         b.hp = 0;
-        explode(w, b.x, b.y, WEAPONS.tongGas.blast!, WEAPONS.tongGas.damage, ev);
+        explodeWeapon(w, "tongGas", b.x, b.y, ev);
+      }
+    } else if (b.kind === "charge") {
+      // A dropped Bungkusan Bom counts down from the moment it is placed.
+      b.fuse -= dt;
+      if (b.fuse <= 0) {
+        b.hp = 0;
+        explodeWeapon(w, "chargepack", b.x, b.y, ev);
       }
     } else if (b.kind === "mine") {
       b.arm = Math.max(0, b.arm - dt);
@@ -21,7 +28,7 @@ export function updatePlaceables(w: World, dt: number, ev: GameEvent[]): void {
       );
       if (trigger) {
         b.hp = 0;
-        explode(w, b.x, b.y, WEAPONS.mercunBola.blast!, WEAPONS.mercunBola.damage, ev);
+        explodeWeapon(w, "mercunBola", b.x, b.y, ev);
       }
     }
   }

@@ -1,6 +1,7 @@
 import { BALANCE } from "./data/balance";
 import type { MapData } from "./map/map-data";
 import { createRng } from "./rng";
+import { updateBlasts } from "./systems/combat";
 import { updateEnemies } from "./systems/enemies";
 import { updateFlow, buildFlow } from "./systems/flowfield";
 import { updatePickups } from "./systems/pickups";
@@ -51,6 +52,8 @@ export function createWorld(opts: WorldOptions): World {
     placeables: [],
     pickups: [],
     unlocked: ["lastik"],
+    level: 1,
+    blasts: [],
     score: 0,
     kills: 0,
     combo: 1,
@@ -98,6 +101,7 @@ export function step(world: World, inputs: PlayerInput[], dt: number = BALANCE.d
   updateEnemies(world, dt, ev);
   updateProjectiles(world, dt, ev);
   updatePlaceables(world, dt, ev);
+  updateBlasts(world, dt, ev);
   updatePickups(world, dt, ev);
   world.enemies = world.enemies.filter((e) => e.hp > 0);
 

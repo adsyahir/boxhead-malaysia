@@ -1,14 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { BALANCE, WEAPONS, createBoxMap, createWorld, step, type WeaponId } from "../src";
+import { BALANCE, WEAPONS, createBoxMap, createWorld, killsForLevel, step, type WeaponId } from "../src";
 import { damageEnemy } from "../src/systems/combat";
 import { IDLE, addEnemy, makeWorld, quietWave, run, seconds } from "./helpers";
 
 const FIRE = { ...IDLE, fire: true };
-
-function unlock(w: ReturnType<typeof makeWorld>, id: WeaponId) {
-  w.score = Math.max(w.score, WEAPONS[id].unlockScore);
-  step(w, [IDLE]); // unlock check runs on score change; trigger via a kill-free path below
-}
 
 function giveWeapon(w: ReturnType<typeof makeWorld>, id: WeaponId, ammo = WEAPONS[id].startAmmo) {
   if (!w.unlocked.includes(id)) w.unlocked.push(id);
@@ -17,18 +12,19 @@ function giveWeapon(w: ReturnType<typeof makeWorld>, id: WeaponId, ammo = WEAPON
 }
 
 describe("unlocks", () => {
-  it("unlocks by team score and grants starting ammo to living players only", () => {
+  it("a weapon unlocks when the team reaches its level, and only living players get the ammo", () => {
     const w = makeWorld({ players: 2 });
     quietWave(w);
     w.players[1]!.alive = false;
     const p = w.players[0]!;
-    const e = addEnemy(w, p.x + 30, p.y, "pontianak", { hp: 1, maxHp: 1, points: 1500 });
+    w.kills = killsForLevel(5) - 1; // one kill from level 5 (Uzi)
+    const e = addEnemy(w, p.x + 30, p.y, "pocong", { hp: 1, maxHp: 1 });
     const ev = run(w, 3, [FIRE]);
-    expect(ev.some((x) => x.type === "weaponUnlocked" && x.weapon === "uzi")).toBe(true);
+    expect(e.hp).toBeLessThanOrEqual(0);
+    expect(ev.some((x) => x.type === "levelUp" && x.level === 5 && x.reward?.kind === "weapon" && x.reward.weapon === "uzi")).toBe(true);
     expect(w.unlocked).toContain("uzi");
     expect(w.players[0]!.ammo.uzi).toBe(140);
     expect(w.players[1]!.ammo.uzi).toBe(0);
-    expect(e.hp).toBeLessThanOrEqual(0);
   });
 
   it("switch cycles unlocked weapons with ammo and skips empty ones", () => {
@@ -224,7 +220,8 @@ describe("loot drops", () => {
     if (unlocked) w.unlocked.push("uzi");
     const seen: string[] = [];
     for (let i = 0; i < 600; i++) {
-      // points 0 so the score never unlocks anything by itself
+      // kills now level the team up and unlock weapons; hold the unlocked list fixed for this test
+      if (!unlocked) w.unlocked = ["lastik"];
       const e = addEnemy(w, 500, 300, "toyol", { hp: 1, maxHp: 1, points: 0 });
       damageEnemy(w, e, 5, []);
       for (const pk of w.pickups) seen.push(pk.kind);

@@ -1,6 +1,6 @@
 import { pointSolid } from "../map/collision";
 import type { GameEvent, Projectile, World } from "../types";
-import { damageEnemy, explode, hurtPlayer } from "./combat";
+import { damageEnemy, explodeAt, hurtPlayer } from "./combat";
 
 export function updateProjectiles(w: World, dt: number, ev: GameEvent[]): void {
   for (const pr of w.projectiles) {
@@ -20,7 +20,7 @@ export function updateProjectiles(w: World, dt: number, ev: GameEvent[]): void {
         pr.x = nx;
         pr.y = ny;
       }
-      if (pr.life <= 0) explode(w, pr.x, pr.y, pr.blast, pr.damage, ev);
+      if (pr.life <= 0) explodeAt(w, pr.x, pr.y, pr.blast, pr.damage, pr.cluster === true, ev);
       continue;
     }
 
@@ -53,13 +53,13 @@ export function updateProjectiles(w: World, dt: number, ev: GameEvent[]): void {
       continue;
     }
 
-    if (pr.life <= 0 && pr.kind === "rocket") explode(w, pr.x, pr.y, pr.blast, pr.damage, ev);
+    if (pr.life <= 0 && pr.kind === "rocket") explodeAt(w, pr.x, pr.y, pr.blast, pr.damage, pr.cluster === true, ev);
   }
   w.projectiles = w.projectiles.filter((p) => p.life > 0);
 }
 
 /** Rockets explode on impact; everything else just ends. */
 function detonate(w: World, pr: Projectile, ev: GameEvent[]): void {
-  if (pr.kind === "rocket") explode(w, pr.x, pr.y, pr.blast, pr.damage, ev);
+  if (pr.kind === "rocket") explodeAt(w, pr.x, pr.y, pr.blast, pr.damage, pr.cluster === true, ev);
   pr.life = 0;
 }

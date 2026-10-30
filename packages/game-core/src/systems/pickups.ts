@@ -2,7 +2,7 @@ import { BALANCE } from "../data/balance";
 import { WEAPONS } from "../data/weapons";
 import { nextInt } from "../rng";
 import type { GameEvent, PickupKind, World } from "../types";
-import { addScore } from "./combat";
+import { addScore, ammoGrant } from "./combat";
 
 export function spawnPickup(w: World, kind: PickupKind, x: number, y: number): void {
   w.pickups.push({
@@ -32,11 +32,11 @@ export function updatePickups(w: World, dt: number, ev: GameEvent[]): void {
     }
     const options = w.unlocked.filter((id) => id !== "lastik");
     if (options.length === 0) {
-      addScore(w, BALANCE.ammoFallbackScore, ev);
+      addScore(w, BALANCE.ammoFallbackScore);
       continue;
     }
     const id = options[nextInt(w.rng, options.length)]!;
-    taker.ammo[id] += Math.round(WEAPONS[id].startAmmo * BALANCE.ammoBoxFraction);
+    taker.ammo[id] += ammoGrant(w, id, Math.round(WEAPONS[id].startAmmo * BALANCE.ammoBoxFraction));
   }
   w.pickups = keep;
 }

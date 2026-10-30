@@ -1,3 +1,4 @@
+import type { UpgradeId } from "./data/progression";
 import type { MapData } from "./map/map-data";
 import type { Rng } from "./rng";
 
@@ -6,17 +7,27 @@ export interface Vec {
   y: number;
 }
 
-export type PlayerInput = { moveX: number; moveY: number; fire: boolean; switchWeapon: boolean };
+export type PlayerInput = {
+  moveX: number;
+  moveY: number;
+  fire: boolean;
+  switchWeapon: boolean;
+  /** Pick a weapon directly: 0..9 for keys 1..9, 0 (index into WEAPON_IDS). Ignored if locked or out of ammo. */
+  select?: number;
+};
 
+/** In key order: 1, 2, 3 ... 9, 0 (see data/weapons.ts). */
 export const WEAPON_IDS = [
   "lastik",
   "uzi",
   "senapangPatah",
-  "pagarBuluh",
   "tongGas",
   "bomIkan",
+  "pagarBuluh",
   "mercunBola",
   "meriamBuluh",
+  "chargepack",
+  "railgun",
 ] as const;
 export type WeaponId = (typeof WEAPON_IDS)[number];
 
@@ -61,6 +72,10 @@ export interface Enemy {
 
 export type ProjectileKind = "bullet" | "pellet" | "rocket" | "fireball" | "grenade";
 
+export type LevelReward =
+  | { kind: "weapon"; weapon: WeaponId }
+  | { kind: "upgrade"; weapon: WeaponId; upgrade: UpgradeId };
+
 export interface Projectile {
   id: number;
   kind: ProjectileKind;
@@ -73,9 +88,11 @@ export interface Projectile {
   /** Seconds left; <= 0 means remove. For grenades this is the fuse. */
   life: number;
   blast: number;
+  /** Explosion leaves secondary blasts (Cluster Explode upgrade). */
+  cluster?: boolean;
 }
 
-export type PlaceableKind = "barricade" | "barrel" | "mine";
+export type PlaceableKind = "barricade" | "barrel" | "mine" | "charge";
 
 export interface Placeable {
   id: number;
@@ -114,8 +131,18 @@ export type GameEvent =
   | { type: "playerHurt"; id: number }
   | { type: "playerDowned"; id: number }
   | { type: "playerRevived"; id: number }
-  | { type: "weaponUnlocked"; weapon: WeaponId }
+  | { type: "levelUp"; level: number; reward: LevelReward | null }
+  | { type: "beam"; x1: number; y1: number; x2: number; y2: number }
   | { type: "gameOver"; score: number; wave: number; kills: number; durationMs: number };
+
+/** A delayed explosion, used by Cluster Explode. Server/sim state only; clients just see the explosion events. */
+export interface PendingBlast {
+  x: number;
+  y: number;
+  radius: number;
+  damage: number;
+  delay: number;
+}
 
 export interface FlowField {
   dist: Int32Array;
@@ -135,6 +162,9 @@ export interface World {
   placeables: Placeable[];
   pickups: Pickup[];
   unlocked: WeaponId[];
+  /** Team level, from team kills. Drives weapon unlocks and upgrades. */
+  level: number;
+  blasts: PendingBlast[];
   score: number;
   kills: number;
   combo: number;

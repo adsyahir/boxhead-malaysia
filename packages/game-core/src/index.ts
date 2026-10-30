@@ -8,3 +8,5 @@ export * from "./data/balance";
 export * from "./data/enemies";
 export * from "./data/waves";
 export * from "./data/weapons";
+export * from "./data/progression";
+export * from "./frame";
