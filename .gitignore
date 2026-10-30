@@ -4,3 +4,8 @@ dist
 coverage
 .env
 *.tsbuildinfo
+test-results
+playwright-report
+next-env.d.ts
+out
+.wrangler
