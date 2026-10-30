@@ -1,8 +1,8 @@
-# Zombie Kampung Pisang
+# Hantu Kampung Pisang
 
-Boxhead 2Play style top-down zombie shooter with a Malaysian kampung theme (pocong, toyol, pontianak). Local 2P on one keyboard, 1P touch on mobile, online leaderboard. Portfolio piece: monorepo, typed core, tests, CI/CD, self-hosted on a VPS behind Cloudflare. UI text is Malay.
+Boxhead 2Play style top-down ghost shooter with a Malaysian kampung theme (pocong, toyol, pontianak). Local 2P on one keyboard, 1P touch on mobile, online leaderboard. Portfolio piece: monorepo, typed core, tests, CI/CD, self-hosted on a VPS behind Cloudflare. UI text is Malay.
 
-Full design spec: the "Zombie Kampung Pisang: Design Spec" of 2026-10-30. Plan and decision log: `.claude/features/zombie-kampung-pisang-v1.md` (read it first). Notion project page (owner keeps tasks there): https://app.notion.com/p/4091ce1f20bd80669961c9c4c96af802
+Full design spec: the "Hantu Kampung Pisang: Design Spec" of 2026-10-30. Plan and decision log: `.claude/features/hantu-kampung-pisang-v1.md` (read it first). Notion project page (owner keeps tasks there): https://app.notion.com/p/4091ce1f20bd80669961c9c4c96af802
 
 ## Commands (IMPORTANT)
 
@@ -52,6 +52,9 @@ Done and committed on `main` (pushed to https://github.com/adsyahir/boxhead-mala
 
 Done but NOT committed (branch `feat/v1-phaser-client`, nothing has been committed since M3): M4, the Phaser client in `apps/web`: menu, map select, 3 generated maps, HUD, night lighting, camera (2P zoom), particles/shake, synthesised WebAudio SFX (mute on M, saved in localStorage), keyboard 1P/2P and touch controls, rotate prompt, Playwright smoke test. Verified: typecheck, lint, tests, next build, e2e, manual run of all 3 maps with no console errors. Not verified: touch on a real device, 2P camera feel, feel of all 8 weapons (needs a human playtest).
 
+### Menu flow, settings, language, heroes (built, uncommitted)
+Game is now **Hantu Kampung Pisang** (renamed 2026-10-31; enemies are Malaysian ghosts). Home `/` is the 3D main menu: Mula -> Mode (1P / 2P / Online soon) -> Hero -> Map. 8 cosmetic heroes (Abu, Siti, Ah Meng, Mei Ling, Muthu, Kavitha, Pak Cik Hamid, Mak Cik Kiah; table in `game/characters.ts`, rigs via `person()` in `game3d/engine/rigs.ts`); in 2P player 1 then player 2 pick. Malay/English switch (`i18n/`, `settings/store.ts`, localStorage `kpp-settings`); Settings, How to Play, Credits screens; pause menu offers Resume, How to Play, Settings, Exit (Exit asks for confirmation). 6 Playwright tests. Phaser `/play2d` menus remain Malay-only. Only Abu/Siti/Ah Meng/Mei Ling were checked visually in-game; Muthu, Kavitha, Hamid, Kiah render with no console errors but were not looked at yet.
+
 ### 3D client (built, uncommitted)
 `/play` is now a Three.js 3D client in `apps/web/game3d/` (built by Opus 5.5 after Fable was unavailable); the Phaser client moved to `/play2d`. `game-core` is unchanged. Voxel/low-poly boxes (all InstancedMesh), 3/4 camera (~56 degree pitch, about 18x10.5 tiles visible), night scene (moon shadows, pelita point lights), React DOM menus/HUD, touch controls, see-through dither when a player stands behind a house. Scale: 1 tile = 32 world px = 1 scene unit; world x -> scene x, world y -> scene z. Shared framework-free input in `apps/web/game/input/key-state.ts` and `touch-state.ts`. Debug: `/play?debug` exposes `window.__kppWorld()`, `?zoom=0.4` moves the camera closer; canvas has `data-scene`, `data-tick`, `data-players`, `data-ms`.
 Verified independently by the controller: typecheck, lint, 68 core tests, next build, Playwright (2 tests: 3D and /play2d) all pass. Opus also played all 3 maps, 2P, pause/mute, game over and mobile landscape in the browser.
@@ -73,7 +76,7 @@ Known gaps: no human playtest of feel/frame rate yet (the browser pane throttles
 - Fable (claude-fable-5-1) needs usage credits in the Claude desktop app. The owner wants to use it from the Claude Code terminal.
 
 ## Next steps (owner's order, 2026-10-31)
-0. Owner: first Cloudflare deploy. Then Malay/English language switch, then main menu flow (Start -> character select; Settings, How to Play, Credits on home page), then level + upgrade list (table in feature file), then leaderboard on D1, then online rooms (2 players, code + public list, Durable Objects).
+0. Owner: first Cloudflare deploy (later). Done: language switch, menu flow, heroes, rename, in-game settings/help. NEXT: online rooms (2 players, code + public list, Durable Objects; on mobile only 1 Player + Online), then antislop polish (antislop-human, antislop-ui, antislop-copywriting), then level + upgrade list, leaderboard on D1.
 
 ## Older next steps
 1. Playtest the 3D version at /play (and /play2d), note feel problems.

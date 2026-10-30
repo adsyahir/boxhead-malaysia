@@ -2,8 +2,8 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Zombie Kampung Pisang",
-  description: "Permainan zombi dari atas dengan suasana kampung Malaysia. Main sendiri atau berdua.",
+  title: "Hantu Kampung Pisang",
+  description: "Permainan hantu dari atas dengan suasana kampung Malaysia. Main sendiri atau berdua.",
 };
 
 export const viewport: Viewport = {

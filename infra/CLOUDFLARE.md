@@ -19,11 +19,11 @@ Everything runs on Cloudflare's edge, so there is no server of your own to crash
    ```bash
    corepack pnpm --filter @kampung/web deploy
    ```
-   It prints your URL, like `https://zombie-kampung-pisang.<your-subdomain>.workers.dev`. Open it and play.
+   It prints your URL, like `https://hantu-kampung-pisang.<your-subdomain>.workers.dev`. Open it and play.
 
 ## Custom domain (optional)
 
-Add your domain to Cloudflare (Websites, Add a domain), then Workers & Pages, zombie-kampung-pisang, Settings, Domains & Routes, Add, Custom domain.
+Add your domain to Cloudflare (Websites, Add a domain), then Workers & Pages, hantu-kampung-pisang, Settings, Domains & Routes, Add, Custom domain.
 
 ## Automatic deploys from GitHub
 

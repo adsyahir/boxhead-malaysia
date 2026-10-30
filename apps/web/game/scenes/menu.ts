@@ -12,7 +12,7 @@ export class MenuScene extends Phaser.Scene {
     const cx = width / 2;
     this.cameras.main.setBackgroundColor("#0a0d16");
 
-    this.add.text(cx, height * 0.2, "ZOMBIE\nKAMPUNG PISANG", {
+    this.add.text(cx, height * 0.2, "HANTU\nKAMPUNG PISANG", {
       fontFamily: "monospace", fontSize: `${Math.max(28, Math.min(54, width / 14))}px`, color: "#ffd24a", align: "center", fontStyle: "bold", stroke: "#3a1a00", strokeThickness: 6,
     }).setOrigin(0.5);
     this.add.text(cx, height * 0.36, "Pocong, toyol dan pontianak mengamuk di kampung!", {

@@ -1,4 +1,4 @@
-# Zombie Kampung Pisang v1: implementation plan
+# Hantu Kampung Pisang v1: implementation plan
 
 Spec: the design spec of 2026-10-30 (sections referenced as §N). This file is the branch memory. Update it as work proceeds.
 
@@ -179,3 +179,15 @@ Backlog order now: 1) Cloudflare deploy (owner steps), 2) language switch Malay/
 - Language switch Malay / English (all UI text; store choice in localStorage; default from browser language). Needs a small i18n layer shared by the 3D UI and the Phaser UI, and key-based strings instead of hard-coded Malay.
 - Proper game-style flow: Main menu -> Start -> choose character (Abu / Siti; online later) -> map select -> play. Home page gets Settings (language, sound volume/mute, controls help, graphics quality), plus "many more like other games": How to Play, Leaderboard, Credits, and later Online. Settings persisted in localStorage.
 - Open questions for the owner before building: which settings matter most; whether character choice is cosmetic only or changes stats; whether 2P picks a character per player.
+
+## Menu flow, settings, language, exit confirm (done 2026-10-31, uncommitted)
+Home `/` is now the 3D main menu: Mula, Cara Bermain, Tetapan, Papan Markah, Kredit (+ BM/EN switch, link to 2D). Start -> Mode (1P / 2P / Online "Akan datang") -> Hero (Abu / Siti, cosmetic) -> Map -> Game. Settings: language, volume, mute, graphics quality (Low = no shadows, DPR 1; engine reloads on change). Language: `apps/web/i18n/` (Malay source, English enforced by type), store in `apps/web/settings/store.ts` (localStorage `kpp-settings`, migrates old mute key). In-game: HUD home button + pause screen "Keluar ke Menu" ask for confirmation ("score, wave and weapons will be lost"); Esc on the warning cancels. Phaser 2D client menus are still Malay-only (its HUD toasts follow the language).
+Tests: 5 Playwright tests (3D run, 2D run, language persists across reload, menu flow, exit confirm). Dev-server runs can show a one-off flaky console error while Next compiles; passes alone and in CI-style build.
+
+### Queue from owner (2026-10-31), not started
+1. DONE (2026-10-31): renamed to "Hantu Kampung Pisang" (enemies are Malaysian ghosts). Updated UI titles, page metadata, Phaser menu, package name, wrangler Worker name (workers.dev URL will be hantu-kampung-pisang), docs. The old spec title in this file is kept only where it quotes the original spec.
+2. Online play must be available (rooms, no login, 2 players, Durable Objects on Cloudflare, code + public list). On mobile: no 2P-on-one-device; only 1 Player and Online.
+3. DONE: 8 heroes (Abu, Siti, Ah Meng, Mei Ling, Muthu, Kavitha, Pak Cik Hamid, Mak Cik Kiah). Cosmetic only. 2P picks one after the other.
+3b. DONE: pause menu has How to Play and Settings (quality change applies after leaving the run).
+4. After everything: run the antislop skills (antislop-human, antislop-ui, antislop-copywriting) over UI/copy.
+5. Earlier: level + upgrade list (table above), leaderboard on D1, deploy (owner later).
