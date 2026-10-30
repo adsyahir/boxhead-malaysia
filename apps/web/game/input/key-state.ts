@@ -24,6 +24,12 @@ export const TWO_PLAYER: [Scheme, Scheme] = [
   { up: ["ArrowUp"], down: ["ArrowDown"], left: ["ArrowLeft"], right: ["ArrowRight"], fire: ["Enter", "NumpadEnter"], swap: ["ShiftRight"] },
 ];
 
+/** Number keys 1 to 9 then 0 select weapons directly (index 0..9 into WEAPON_IDS). */
+const DIGIT_CODES: string[][] = [
+  ["Digit1", "Numpad1"], ["Digit2", "Numpad2"], ["Digit3", "Numpad3"], ["Digit4", "Numpad4"], ["Digit5", "Numpad5"],
+  ["Digit6", "Numpad6"], ["Digit7", "Numpad7"], ["Digit8", "Numpad8"], ["Digit9", "Numpad9"], ["Digit0", "Numpad0"],
+];
+
 /** Keys whose browser default (scrolling) must be suppressed while playing. */
 export const CAPTURED = ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Space"];
 
@@ -66,13 +72,16 @@ export class KeyState {
 
   sample(): SampledInput {
     const swapTapped: boolean[] = [];
-    const inputs = this.schemes.map((s) => {
+    // Digits belong to the first player (solo, or player 1): two players cannot share the number row.
+    const pick = DIGIT_CODES.findIndex((codes) => codes.some((c) => this.tapped.has(c)));
+    const inputs = this.schemes.map((s, i): PlayerInput => {
       swapTapped.push(s.swap.some((c) => this.tapped.has(c)));
       return {
         moveX: (this.any(s.right) ? 1 : 0) - (this.any(s.left) ? 1 : 0),
         moveY: (this.any(s.down) ? 1 : 0) - (this.any(s.up) ? 1 : 0),
         fire: this.any(s.fire),
         switchWeapon: this.any(s.swap),
+        ...(i === 0 && pick >= 0 ? { select: pick } : {}),
       };
     });
     this.tapped.clear();

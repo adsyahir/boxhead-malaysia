@@ -77,7 +77,7 @@ export class HudScene extends Phaser.Scene {
     this.wave.setText(waveLabel(s)).setPosition(width / 2, 34);
     this.combo.setText(s.combo > 1 ? `Kombo x${s.combo}` : "").setPosition(width / 2, 56);
 
-    const row = WEAPON_IDS.map((id, i) => (s.unlocked.includes(id) ? `${i + 1}.${WEAPONS[id].name}` : `${i + 1}.---`)).join("  ");
+    const row = WEAPON_IDS.map((id, i) => (s.unlocked.includes(id) ? `${(i + 1) % 10}.${WEAPONS[id].name}` : `${(i + 1) % 10}.---`)).join("  ");
     this.unlocks.setText(row).setPosition(width / 2, height - 6).setVisible(!this.touch);
 
     this.pause.setPosition(width / 2, height / 2).setVisible(s.paused);

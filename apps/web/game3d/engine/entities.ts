@@ -405,6 +405,19 @@ export class EntityView {
         this.glow.box(0xffd060, 0, 0.74, 0, 0.08, 0.1, 0.08, 0, real * 20, 0, root);
         lights.request(x, 1, z, 0xff7030, 6, 5);
       }
+    } else if (b.kind === "charge") {
+      // fuse counts down from 2 s: the blink speeds up as it runs out
+      const left = Math.max(0, b.fuse);
+      const blink = Math.floor(real * (4 + (2 - left) * 6)) % 2 === 0;
+      rootMatrix(root, x, 0, z, 0.2);
+      this.lit.box(0xb02a22, 0, 0.14, 0, 0.3, 0.22, 0.2, 0, 0, 0, root);
+      this.lit.box(0xd8d0b0, 0, 0.14, 0, 0.32, 0.04, 0.22, 0, 0, 0, root);
+      this.lit.box(0xd8d0b0, 0, 0.2, 0, 0.32, 0.03, 0.22, 0, 0, 0, root);
+      this.lit.box(0x3a2a1a, 0.06, 0.31, 0, 0.03, 0.1, 0.03, 0, 0, 0.3, root);
+      if (blink) this.glow.box(0xffd060, 0.08, 0.38, 0, 0.07, 0.07, 0.07, 0, real * 15, 0, root);
+      this.halo(x, z, 0.9, 0x401808);
+      this.blob(x, z, 0.7);
+      lights.request(x, 0.8, z, 0xff7030, 4, 4);
     } else {
       const armed = b.arm <= 0;
       rootMatrix(root, x, 0, z, 0);

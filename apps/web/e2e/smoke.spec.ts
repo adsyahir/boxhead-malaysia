@@ -88,7 +88,8 @@ test("exit to menu asks for confirmation and only leaves on yes", async ({ page 
   const canvas = page.locator("canvas");
   await expect(canvas).toHaveAttribute("data-scene", "Game", { timeout: 20_000 });
 
-  await page.getByRole("button", { name: "Keluar ke Menu" }).first().click(); // HUD home button pauses and warns
+  await page.keyboard.press("Escape"); // pause, then Exit from the pause menu warns before leaving
+  await page.locator(".g3d-pause-actions").getByRole("button", { name: "Keluar ke Menu" }).click();
   await expect(page.getByRole("alertdialog")).toBeVisible();
   await page.getByRole("button", { name: /Batal/ }).click(); // keep playing
   await expect(page.getByRole("alertdialog")).toBeHidden();
@@ -206,4 +207,83 @@ test("online: a public room shows up in the list and can be joined from it", asy
   await expect(guest.getByTestId("room-code")).toHaveText(code);
   await host.context().close();
   await guest.context().close();
+});
+
+test("upgrade list shows every level from How to Play", async ({ page }) => {
+  await page.goto("/");
+  await expect(page.getByRole("button", { name: /Cara Bermain/ })).toBeVisible({ timeout: 30_000 });
+  await page.getByRole("button", { name: /Cara Bermain/ }).click();
+  await page.getByRole("button", { name: "Lihat senarai naik taraf" }).click();
+  await expect(page.getByRole("heading", { name: "Senarai Naik Taraf" })).toBeVisible();
+  await expect(page.locator(".g3d-upgrades li")).toHaveCount(58);
+  await expect(page.locator(".g3d-upgrades li", { hasText: "Senjata baru: Uzi (kekunci 2)" })).toContainText("5");
+  await expect(page.locator(".g3d-upgrades li", { hasText: "Senjata baru: Senapang Kilat (kekunci 0)" })).toContainText("70");
+  await expect(page.locator(".g3d-upgrades li").last()).toContainText("Senapang Kilat+: Jarak Jauh");
+  await page.keyboard.press("Escape"); // back to How to Play
+  await expect(page.getByRole("heading", { name: "Cara Bermain" })).toBeVisible();
+});
+
+test("number keys pick weapons directly and the HUD shows the team level", async ({ page }) => {
+  await page.goto("/?debug");
+  await expect(page.getByRole("button", { name: /Mula/ })).toBeVisible({ timeout: 30_000 });
+  await page.getByRole("button", { name: /Mula/ }).click();
+  await page.getByRole("button", { name: /1 Pemain/ }).click();
+  await page.getByRole("button", { name: /Abu/ }).click();
+  await page.getByRole("button", { name: /Kampung Pisang/ }).click();
+  await expect(page.locator("canvas")).toHaveAttribute("data-scene", "Game", { timeout: 20_000 });
+  await expect(page.locator(".g3d-level")).toContainText("Tahap 1");
+
+  // give the team level 5 (Uzi) without grinding kills
+  await page.evaluate(() => {
+    const w = (window as unknown as { __kppWorld: () => { level: number; unlocked: string[]; players: { ammo: Record<string, number> }[] } }).__kppWorld();
+    w.level = 5;
+    w.unlocked.push("uzi");
+    w.players[0]!.ammo.uzi = 60;
+  });
+  await expect(page.locator(".g3d-level")).toContainText("Tahap 5");
+  await expect(page.locator(".g3d-unlocks span.cur")).toContainText("1.Lastik");
+  await page.keyboard.press("2");
+  await expect(page.locator(".g3d-unlocks span.cur")).toContainText("2.Uzi");
+  await page.keyboard.press("5"); // Bom Ikan is not unlocked: ignored
+  await page.waitForTimeout(300);
+  await expect(page.locator(".g3d-unlocks span.cur")).toContainText("2.Uzi");
+  await page.keyboard.press("1");
+  await expect(page.locator(".g3d-unlocks span.cur")).toContainText("1.Lastik");
+});
+
+test("menu soundscape waits for a key press, then plays; the game stays quiet until ghosts are near", async ({ page }) => {
+  const errors = collectErrors(page);
+  await page.goto("/?debug");
+  await expect(page.getByRole("button", { name: /Mula/ })).toBeVisible({ timeout: 30_000 });
+  await page.waitForFunction(() => typeof (window as unknown as { __kppAudio?: unknown }).__kppAudio === "function");
+  const audio = () => page.evaluate(() => (window as unknown as { __kppAudio: () => { ready: boolean; ambience: boolean; level: number; dread: { intensity: number; beats: number } } }).__kppAudio());
+
+  // browsers keep a page silent until the first gesture; the menu says how to turn it on
+  expect((await audio()).ready).toBe(false);
+  await expect(page.getByText(/Ketik skrin atau tekan satu kekunci/)).toBeVisible();
+  await page.keyboard.press("Shift");
+  await expect.poll(async () => (await audio()).ambience).toBe(true);
+  await expect(page.getByText(/Ketik skrin atau tekan satu kekunci/)).toBeHidden();
+  await expect.poll(async () => (await audio()).level, { timeout: 15_000 }).toBeGreaterThan(0.001); // real sound reaches the output
+
+  // into a game: the soundscape stops, and with no enemy close there is no dread
+  await page.getByRole("button", { name: /Mula/ }).click();
+  await page.getByRole("button", { name: /1 Pemain/ }).click();
+  await page.getByRole("button", { name: /Abu/ }).click();
+  await page.getByRole("button", { name: /Kampung Pisang/ }).click();
+  await expect(page.locator("canvas")).toHaveAttribute("data-scene", "Game", { timeout: 20_000 });
+  await expect.poll(async () => (await audio()).ambience).toBe(false);
+  expect((await audio()).dread.intensity).toBe(0);
+
+  // a ghost right next to the hero: dread rises and the heart starts beating
+  await page.evaluate(() => {
+    const w = (window as unknown as { __kppWorld: () => { queue: unknown[]; phase: string; enemies: unknown[]; players: { x: number; y: number }[] } }).__kppWorld();
+    w.queue = [];
+    w.phase = "wave";
+    const p = w.players[0]!;
+    w.enemies = [{ id: 7001, kind: "pocong", x: p.x + 90, y: p.y, radius: 11, hp: 100000, maxHp: 100000, speed: 0, contactDamage: 0, points: 0, rise: 0, attackCd: 0, fireCd: 99, hop: 0, kx: 0, ky: 0 }];
+  });
+  await expect.poll(async () => (await audio()).dread.intensity).toBeGreaterThan(0.5);
+  await expect.poll(async () => (await audio()).dread.beats, { timeout: 10_000 }).toBeGreaterThan(1);
+  expect(errors).toEqual([]);
 });

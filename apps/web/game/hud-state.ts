@@ -1,5 +1,5 @@
-import { type GameEvent, type WeaponId, type World } from "@kampung/game-core";
-import { t, weaponName } from "../i18n";
+import { MAX_LEVEL, WEAPON_IDS, killsForLevel, type GameEvent, type WeaponId, type World } from "@kampung/game-core";
+import { t, upgradeName, weaponName } from "../i18n";
 import { DEFAULT_CHARACTERS, characterName, type Character } from "./characters";
 
 export interface HudPlayer {
@@ -15,6 +15,10 @@ export interface HudPlayer {
 export interface HudState {
   players: HudPlayer[];
   score: number;
+  /** Team level, and kills made / needed inside the current level (for the progress bar). */
+  level: number;
+  xpHave: number;
+  xpNeed: number;
   wave: number;
   combo: number;
   phase: "break" | "wave";
@@ -51,6 +55,9 @@ export function buildHudState(w: World, paused: boolean): HudState {
       ammo: p.ammo[p.weapon],
     })),
     score: w.score,
+    level: w.level,
+    xpHave: w.level >= MAX_LEVEL ? 1 : w.kills - killsForLevel(w.level),
+    xpNeed: w.level >= MAX_LEVEL ? 1 : killsForLevel(w.level + 1) - killsForLevel(w.level),
     wave: w.wave,
     combo: w.combo,
     phase: w.phase,
@@ -80,8 +87,16 @@ export function eventToast(e: GameEvent): string | null {
       return t("toastDown", { name: nameOf(e.id) });
     case "playerRevived":
       return t("toastRevive", { name: nameOf(e.id) });
-    case "weaponUnlocked":
-      return t("toastWeapon", { w: weaponName(e.weapon) });
+    case "levelUp": {
+      // Only levels that give something get a toast; the HUD level number shows the rest.
+      if (!e.reward) return null;
+      const head = t("toastLevelUp", { n: e.level });
+      if (e.reward.kind === "weapon") {
+        const key = (WEAPON_IDS.indexOf(e.reward.weapon) + 1) % 10;
+        return `${head} ${t("toastNewWeapon", { w: weaponName(e.reward.weapon), k: key })}`;
+      }
+      return `${head} ${t("toastUpgrade", { w: weaponName(e.reward.weapon), u: upgradeName(e.reward.upgrade) })}`;
+    }
     default:
       return null;
   }

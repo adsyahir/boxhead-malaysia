@@ -1,6 +1,6 @@
-import type { WeaponId } from "@kampung/game-core";
+import type { UpgradeId, WeaponId } from "@kampung/game-core";
 import { getSettings, type Lang } from "../settings/store";
-import { WEAPON_NAMES, en, ms, type Key } from "./strings";
+import { UPGRADE_NAMES, WEAPON_NAMES, en, ms, type Key } from "./strings";
 
 export type { Key } from "./strings";
 export type Vars = Record<string, string | number>;
@@ -16,4 +16,8 @@ export function t(key: Key, vars?: Vars, lang: Lang = getSettings().lang): strin
 
 export function weaponName(id: WeaponId, lang: Lang = getSettings().lang): string {
   return WEAPON_NAMES[lang][id];
+}
+
+export function upgradeName(id: UpgradeId, lang: Lang = getSettings().lang): string {
+  return UPGRADE_NAMES[lang][id];
 }

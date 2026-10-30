@@ -15,13 +15,16 @@ import { createRoom, listRooms } from "./net/api";
 import { OnlineClient, type LinkStatus, type LobbyView } from "./net/client";
 import Hud from "./ui/Hud";
 import { Lobby, OnlineMenu, nameIsValid } from "./ui/OnlineScreens";
-import { CharacterSelect, Credits, GameOver, HowToPlay, MapSelect, Menu, ModeSelect, SettingsScreen } from "./ui/Screens";
+import { CharacterSelect, Credits, GameOver, HowToPlay, MapSelect, Menu, ModeSelect, SettingsScreen, UpgradeList } from "./ui/Screens";
 import TouchControls from "./ui/TouchControls";
 
 const TOAST_MS = 1600;
 
+/** Screens that play the menu soundscape; the game itself and the game-over screen are quiet until something is near. */
+const AMBIENT_SCREENS: Screen[] = ["Menu", "Mode", "Character", "MapSelect", "Online", "Lobby", "Settings", "Help", "Upgrades", "Credits"];
+
 /** UI screens. Only MapSelect, Game and GameOver have their own engine scene; the rest sit over the menu backdrop. */
-type Screen = "Menu" | "Mode" | "Character" | "MapSelect" | "Online" | "Lobby" | "Settings" | "Help" | "Credits" | "Game" | "GameOver";
+type Screen = "Menu" | "Mode" | "Character" | "MapSelect" | "Online" | "Lobby" | "Settings" | "Help" | "Upgrades" | "Credits" | "Game" | "GameOver";
 
 const ERROR_KEY: Record<ErrorCode, Key> = {
   bad_message: "errGeneric",
@@ -59,8 +62,8 @@ export default function Game3D() {
   /** Graphics quality is applied by rebuilding the engine, so it waits until you are out of a run. */
   const [engineQuality, setEngineQuality] = useState(quality);
   /** Help and Settings can be opened over a paused run without ending it. */
-  const [overlay, setOverlay] = useState<"Help" | "Settings" | null>(null);
-  const overlayRef = useRef<"Help" | "Settings" | null>(null);
+  const [overlay, setOverlay] = useState<"Help" | "Settings" | "Upgrades" | null>(null);
+  const overlayRef = useRef<"Help" | "Settings" | "Upgrades" | null>(null);
   overlayRef.current = overlay;
   const [screen, setScreen] = useState<Screen>("Menu");
   const screenRef = useRef<Screen>("Menu");
@@ -375,6 +378,12 @@ export default function Game3D() {
     if (screen !== "Game" && quality !== engineQuality) setEngineQuality(quality);
   }, [screen, quality, engineQuality]);
 
+  // the menu soundscape plays on menu screens (once the browser lets sound start) and stops for a run
+  useEffect(() => {
+    audio.setAmbience(AMBIENT_SCREENS.includes(screen));
+  }, [screen]);
+  useEffect(() => () => audio.setAmbience(false), []);
+
   const pickMode = useCallback(
     (n: 1 | 2) => {
       setPlayers(n);
@@ -432,7 +441,7 @@ export default function Game3D() {
           setOverlay(null);
           return;
         }
-        const back: Partial<Record<Screen, Screen>> = { Mode: "Menu", MapSelect: "Character", Online: "Mode", Settings: "Menu", Help: "Menu", Credits: "Menu" };
+        const back: Partial<Record<Screen, Screen>> = { Mode: "Menu", MapSelect: "Character", Online: "Mode", Settings: "Menu", Help: "Menu", Upgrades: "Help", Credits: "Menu" };
         const to = back[s];
         if (s === "Character") backFromCharacter();
         else if (s === "Lobby") leaveToOnlineMenu();
@@ -496,6 +505,7 @@ export default function Game3D() {
           onExit={requestExit}
           onHelp={() => setOverlay("Help")}
           onSettings={() => setOverlay("Settings")}
+          onUpgrades={() => setOverlay("Upgrades")}
           confirmExit={confirmExit}
           onCancelExit={() => setConfirmExit(false)}
           onConfirmExit={isOnline ? leaveRoomToMenu : toMenu}
@@ -544,11 +554,14 @@ export default function Game3D() {
       )}
       {screen === "Game" && overlay && (
         <div className="g3d-ingame">
-          {overlay === "Help" ? <HowToPlay touch={touch} onBack={() => setOverlay(null)} /> : <SettingsScreen inGame onBack={() => setOverlay(null)} />}
+          {overlay === "Help" && <HowToPlay touch={touch} onBack={() => setOverlay(null)} onUpgrades={() => setOverlay("Upgrades")} />}
+          {overlay === "Settings" && <SettingsScreen inGame onBack={() => setOverlay(null)} />}
+          {overlay === "Upgrades" && <UpgradeList currentLevel={hud?.level} onBack={() => setOverlay(null)} />}
         </div>
       )}
       {screen === "Settings" && <SettingsScreen onBack={() => go("Menu")} />}
-      {screen === "Help" && <HowToPlay touch={touch} onBack={() => go("Menu")} />}
+      {screen === "Help" && <HowToPlay touch={touch} onBack={() => go("Menu")} onUpgrades={() => go("Upgrades")} />}
+      {screen === "Upgrades" && <UpgradeList onBack={() => go("Help")} />}
       {screen === "Credits" && <Credits onBack={() => go("Menu")} />}
       {screen === "GameOver" && run && (
         <GameOver

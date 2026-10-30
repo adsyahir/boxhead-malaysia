@@ -8,6 +8,8 @@ export interface RunSummary {
   score: number;
   wave: number;
   kills: number;
+  /** Team level reached (online runs and the 3D client; the 2D client leaves it out). */
+  level?: number;
   durationMs: number;
   map: string;
   mode: "1p" | "2p" | "online";

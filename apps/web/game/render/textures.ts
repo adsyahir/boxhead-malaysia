@@ -64,6 +64,11 @@ export function generatePlaceholderTextures(scene: Phaser.Scene): void {
     g.fillStyle(0xe8d020).fillRect(4, 11, 18, 4);
     g.lineStyle(2, 0x601008).strokeCircle(13, 13, 11);
   });
+  tex(scene, "charge", 24, 24, (g) => {
+    g.fillStyle(0xb02a22).fillRect(3, 6, 18, 12);
+    g.fillStyle(0xd8d0b0).fillRect(3, 10, 18, 3);
+    g.fillStyle(0xffa040).fillCircle(18, 4, 2.5);
+  });
   tex(scene, "mine", 18, 18, (g) => {
     g.fillStyle(0x303038).fillCircle(9, 9, 8);
     g.fillStyle(0xff3030).fillCircle(9, 9, 2.5);

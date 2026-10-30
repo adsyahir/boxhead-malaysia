@@ -387,6 +387,21 @@ const HELD: Record<WeaponId, Held> = {
     { c: 0x4a6a2a, p: [0, -0.06, 0.08], s: [0.15, 0.04, 0.15] },
     { c: 0x4a6a2a, p: [0, -0.34, 0.08], s: [0.15, 0.04, 0.15] },
   ],
+  // a brick of dynamite bundled with string and a short fuse
+  chargepack: [
+    { c: 0xb02a22, p: [0, -0.1, 0.04], s: [0.16, 0.2, 0.1] },
+    { c: 0xd8d0b0, p: [0, -0.1, 0.04], s: [0.17, 0.04, 0.11] },
+    { c: 0x3a2a1a, p: [0, -0.22, 0.04], s: [0.02, 0.07, 0.02] },
+    { c: 0xffa040, p: [0, -0.27, 0.04], s: [0.03, 0.03, 0.03], glow: true },
+  ],
+  // a long lightning rifle: dark barrel, bright coils
+  railgun: [
+    { c: 0x2a2e3a, p: [0, -0.2, 0.04], s: [0.08, 0.6, 0.08] },
+    { c: 0x5a6070, p: [0, 0.02, 0.05], s: [0.1, 0.16, 0.12] },
+    { c: 0x7ad0ff, p: [0, -0.16, 0.04], s: [0.11, 0.04, 0.11], glow: true },
+    { c: 0x7ad0ff, p: [0, -0.3, 0.04], s: [0.11, 0.04, 0.11], glow: true },
+    { c: 0xaee8ff, p: [0, -0.5, 0.04], s: [0.04, 0.04, 0.04], glow: true },
+  ],
 };
 
 const heldCache = new Map<WeaponId, { m: THREE.Matrix4; c: THREE.Color; glow: boolean }[]>();

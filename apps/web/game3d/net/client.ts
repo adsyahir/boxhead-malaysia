@@ -166,11 +166,12 @@ export class OnlineClient {
     if (this.ws?.readyState === WebSocket.OPEN) this.ws.send(JSON.stringify(msg));
   }
 
-  /** Called every frame; sends at most NET.inputHz per second. */
-  sendInput(i: { mx: number; my: number; fire: boolean; swap: boolean; taps: number }, nowMs: number): void {
-    if (nowMs - this.lastInputAt < 1000 / NET.inputHz) return;
+  /** Called every frame; sends at most NET.inputHz per second. Returns whether this call actually sent. */
+  sendInput(i: { mx: number; my: number; fire: boolean; swap: boolean; taps: number; sel?: number }, nowMs: number): boolean {
+    if (nowMs - this.lastInputAt < 1000 / NET.inputHz) return false;
     this.lastInputAt = nowMs;
-    this.send({ t: "input", seq: ++this.seq, ...i });
+    this.send({ t: "input", seq: ++this.seq, mx: i.mx, my: i.my, fire: i.fire, swap: i.swap, taps: i.taps, ...(i.sel !== undefined ? { sel: i.sel } : {}) });
+    return true;
   }
 
   /** Leave on purpose: gives up the seat. */

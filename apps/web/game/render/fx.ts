@@ -108,9 +108,17 @@ export class Fx {
         case "playerDowned":
           audio.death();
           break;
-        case "weaponUnlocked":
-          audio.weaponUnlocked();
+        case "levelUp":
+          if (e.reward?.kind === "weapon") audio.weaponUnlocked();
+          else if (e.reward) audio.upgrade();
           break;
+        case "beam": {
+          const line = this.scene.add.graphics().setDepth(940);
+          line.lineStyle(5, 0xaee8ff, 1).lineBetween(e.x1, e.y1, e.x2, e.y2);
+          this.scene.tweens.add({ targets: line, alpha: 0, duration: 200, onComplete: () => line.destroy() });
+          cam.shake(80, 0.004);
+          break;
+        }
         case "gameOver":
           break;
       }

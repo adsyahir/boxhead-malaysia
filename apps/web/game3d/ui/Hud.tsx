@@ -16,6 +16,7 @@ interface Props {
   onExit(): void;
   onHelp(): void;
   onSettings(): void;
+  onUpgrades(): void;
   confirmExit: boolean;
   /** A shared room: the menu cannot pause the game. */
   online?: boolean;
@@ -43,7 +44,7 @@ function PlayerCard({ p, side, index }: { p: HudState["players"][number]; side: 
   );
 }
 
-export default function Hud({ hud, touch, toast, muted, onMute, onPause, onExit, onHelp, onSettings, confirmExit, online = false, onCancelExit, onConfirmExit }: Props) {
+export default function Hud({ hud, touch, toast, muted, onMute, onPause, onExit, onHelp, onSettings, onUpgrades, confirmExit, online = false, onCancelExit, onConfirmExit }: Props) {
   const t = useT();
   return (
     <div className="g3d-hud">
@@ -52,6 +53,19 @@ export default function Hud({ hud, touch, toast, muted, onMute, onPause, onExit,
       ))}
       <div className="g3d-center">
         <div className="g3d-score">{t("score")} {hud.score}</div>
+        <div className="g3d-level" key={hud.level}>
+          <span>{t("levelShort", { n: hud.level })}</span>
+          <div
+            className="g3d-xp"
+            role="progressbar"
+            aria-label={hud.xpNeed > 1 ? t("levelProgress", { have: hud.xpHave, need: hud.xpNeed }) : t("levelMax")}
+            aria-valuemin={0}
+            aria-valuemax={hud.xpNeed}
+            aria-valuenow={hud.xpHave}
+          >
+            <div className="g3d-xpfill" style={{ width: `${Math.min(100, (hud.xpHave / Math.max(1, hud.xpNeed)) * 100)}%` }} />
+          </div>
+        </div>
         <div className="g3d-wave">{waveLabel(hud)}</div>
         {hud.combo > 1 && (
           <div className="g3d-combo" key={hud.combo}>
@@ -60,9 +74,6 @@ export default function Hud({ hud, touch, toast, muted, onMute, onPause, onExit,
         )}
       </div>
       <div className="g3d-corner">
-        <button type="button" className="g3d-icon" tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={onExit} aria-label={t("exitToMenu")}>
-          ⌂
-        </button>
         <button type="button" className="g3d-icon" tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={onPause} aria-label={t("pause")}>
           ❚❚
         </button>
@@ -73,8 +84,8 @@ export default function Hud({ hud, touch, toast, muted, onMute, onPause, onExit,
       {!touch && (
         <div className="g3d-unlocks">
           {WEAPON_IDS.map((id, i) => (
-            <span key={id} className={hud.unlocked.includes(id) ? "on" : ""}>
-              {i + 1}.{hud.unlocked.includes(id) ? weaponName(id) : "---"}
+            <span key={id} className={`${hud.unlocked.includes(id) ? "on" : ""}${hud.players[0]?.weapon === id ? " cur" : ""}`}>
+              {(i + 1) % 10}.{hud.unlocked.includes(id) ? weaponName(id) : "---"}
             </span>
           ))}
         </div>
@@ -94,6 +105,9 @@ export default function Hud({ hud, touch, toast, muted, onMute, onPause, onExit,
             </button>
             <button type="button" className="g3d-btn" onClick={onHelp}>
               {t("howToPlay")}
+            </button>
+            <button type="button" className="g3d-btn" onClick={onUpgrades}>
+              {t("upgradeList")}
             </button>
             <button type="button" className="g3d-btn" onClick={onSettings}>
               {t("settings")}

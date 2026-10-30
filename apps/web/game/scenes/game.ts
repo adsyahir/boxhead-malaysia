@@ -2,7 +2,8 @@ import * as Phaser from "phaser";
 import { createWorld, type GameEvent, type PlayerInput, type World } from "@kampung/game-core";
 import { VIEW_WORLD_HEIGHT, VIEW_WORLD_WIDTH, MIN_ZOOM_FACTOR, type RunSummary } from "../constants";
 import { audio } from "../audio/audio";
-import { advance, newRunSeed } from "../fixed-step";
+import { DreadAudio } from "../audio/dread";
+import { advance, newRunSeed, newTapCarry } from "../fixed-step";
 import { HUD_KEY, buildHudState } from "../hud-state";
 import { KeyboardInput } from "../input/keyboard";
 import { isTouchDevice, sampleTouch } from "../input/touch";
@@ -22,6 +23,8 @@ export class GameScene extends Phaser.Scene {
   private keyboard: KeyboardInput | null = null;
   private touch = false;
   private acc = 0;
+  private readonly taps = newTapCarry();
+  private readonly dread = new DreadAudio(() => audio.rig());
   private paused = false;
   private ended = false;
   private camX = 0;
@@ -93,6 +96,7 @@ export class GameScene extends Phaser.Scene {
     this.view.destroy();
     this.lighting.destroy();
     this.fx.destroy();
+    this.dread.dispose();
     this.registry.remove(HUD_KEY);
     this.scene.stop("Hud");
   }
@@ -126,12 +130,13 @@ export class GameScene extends Phaser.Scene {
     const frameDt = Math.min(deltaMs / 1000, 0.25);
     const sampled = this.sampleInputs();
     let events: GameEvent[] = [];
-    if (!this.paused && !this.ended) ({ acc: this.acc, events } = advance(this.world, sampled, this.acc, frameDt));
+    if (!this.paused && !this.ended) ({ acc: this.acc, events } = advance(this.world, sampled, this.acc, frameDt, this.taps));
 
     this.fx.handle(events, this.world, time);
     for (const e of events) if (e.type === "gameOver") this.finish(e);
 
     this.view.sync(this.world, time);
+    this.dread.update(this.world.enemies, this.world.players.filter((p) => p.alive), frameDt, time / 1000, !this.paused && !this.ended);
     this.updateCamera(frameDt);
     this.lighting.update(this.cameras.main, this.world, this.paused ? 0 : frameDt);
     this.publishHud();

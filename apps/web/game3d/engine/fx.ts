@@ -25,6 +25,14 @@ interface Blast {
   active: boolean;
 }
 
+interface Beam {
+  mesh: THREE.Mesh;
+  age: number;
+  active: boolean;
+}
+
+const BEAM_LIFE = 0.22;
+
 /** Turns one-shot GameEvents into particles, shake, light flashes, floating text, sound and toasts. */
 export class Fx {
   readonly group = new THREE.Group();
@@ -33,6 +41,9 @@ export class Fx {
   private readonly ringGeo = new THREE.RingGeometry(0.75, 1, 24).rotateX(-Math.PI / 2);
   private readonly sphereMat = new THREE.MeshBasicMaterial({ color: 0xffa040, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending });
   private readonly ringMat = new THREE.MeshBasicMaterial({ color: 0xffc070, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide });
+  private readonly beams: Beam[] = [];
+  private readonly beamGeo = new THREE.BoxGeometry(1, 1, 1);
+  private readonly beamMat = new THREE.MeshBasicMaterial({ color: 0xaee8ff, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending });
   private lastHitSound = 0;
 
   constructor(
@@ -43,6 +54,13 @@ export class Fx {
     private readonly text: FloatText,
     private readonly toast: (t: string) => void,
   ) {
+    for (let i = 0; i < 4; i++) {
+      const mesh = new THREE.Mesh(this.beamGeo, this.beamMat.clone());
+      mesh.visible = false;
+      mesh.renderOrder = 4;
+      this.group.add(mesh);
+      this.beams.push({ mesh, age: 0, active: false });
+    }
     for (let i = 0; i < 6; i++) {
       const sphere = new THREE.Mesh(this.sphereGeo, this.sphereMat.clone());
       const ring = new THREE.Mesh(this.ringGeo, this.ringMat.clone());
@@ -154,9 +172,32 @@ export class Fx {
         case "playerDowned":
           audio.death();
           break;
-        case "weaponUnlocked":
-          audio.weaponUnlocked();
+        case "beam": {
+          const x1 = toX(e.x1);
+          const z1 = toZ(e.y1);
+          const x2 = toX(e.x2);
+          const z2 = toZ(e.y2);
+          const len = Math.hypot(x2 - x1, z2 - z1);
+          const b = this.beams.find((q) => !q.active) ?? this.beams[0]!;
+          b.active = true;
+          b.age = 0;
+          b.mesh.visible = true;
+          b.mesh.position.set((x1 + x2) / 2, 0.62, (z1 + z2) / 2);
+          b.mesh.rotation.set(0, Math.atan2(-(z2 - z1), x2 - x1), 0);
+          b.mesh.scale.set(Math.max(0.1, len), 0.09, 0.09);
+          this.particles.emit({ count: Math.min(14, 4 + Math.round(len)), x: (x1 + x2) / 2, y: 0.62, z: (z1 + z2) / 2, colors: [0xaee8ff, 0xffffff, 0x7ac8ff], speed: [0.2, 1.1], up: [-0.1, 0.5], life: [0.15, 0.4], size: [0.04, 0.09], glow: true, gravity: 0, drag: 2, spread: len * 0.45 });
+          this.lights.flash(x2, 0.8, z2, 0x9ad8ff, 18, 6, 0.25);
+          this.cam.shake(0.12);
           break;
+        }
+        case "levelUp": {
+          for (const p of world.players) {
+            if (p.alive) this.particles.emit({ count: 16, x: toX(p.x), y: 0.5, z: toZ(p.y), colors: [0xffd24a, 0xffffff, 0xffa030], speed: [0.8, 2.2], up: [2, 4.5], life: [0.4, 0.9], size: [0.05, 0.1], glow: true, gravity: 2 });
+          }
+          if (e.reward?.kind === "weapon") audio.weaponUnlocked();
+          else if (e.reward) audio.upgrade();
+          break;
+        }
         case "gameOver":
           break;
       }
@@ -164,6 +205,18 @@ export class Fx {
   }
 
   update(dt: number): void {
+    for (const q of this.beams) {
+      if (!q.active) continue;
+      q.age += dt;
+      const f = q.age / BEAM_LIFE;
+      if (f >= 1) {
+        q.active = false;
+        q.mesh.visible = false;
+        continue;
+      }
+      (q.mesh.material as THREE.MeshBasicMaterial).opacity = 1 - f;
+      q.mesh.scale.y = q.mesh.scale.z = 0.09 * (1 - f * 0.6);
+    }
     for (const b of this.blasts) {
       if (!b.active) continue;
       b.age += dt;
@@ -188,6 +241,10 @@ export class Fx {
       b.active = false;
       b.sphere.visible = b.ring.visible = false;
     }
+    for (const q of this.beams) {
+      q.active = false;
+      q.mesh.visible = false;
+    }
   }
 
   dispose(): void {
@@ -199,5 +256,8 @@ export class Fx {
       (b.sphere.material as THREE.Material).dispose();
       (b.ring.material as THREE.Material).dispose();
     }
+    this.beamGeo.dispose();
+    this.beamMat.dispose();
+    for (const q of this.beams) (q.mesh.material as THREE.Material).dispose();
   }
 }

@@ -1,12 +1,13 @@
 "use client";
 
-import { WEAPONS, WEAPON_IDS } from "@kampung/game-core";
+import { UPGRADE_LIST, WEAPONS, WEAPON_IDS } from "@kampung/game-core";
 import { CHARACTERS, HEROES, characterName, hex, type Character } from "../../game/characters";
 import type { RunSummary } from "../../game/constants";
 import { MAPS } from "../../game/maps";
-import { weaponName } from "../../i18n";
+import { upgradeName, weaponName } from "../../i18n";
 import type { Key } from "../../i18n";
 import { resetSettings, updateSettings, type Quality } from "../../settings/store";
+import { useAudioReady } from "../../game/audio/use-audio-ready";
 import { useSettings, useT } from "../../settings/react";
 import LangSwitch from "./LangSwitch";
 
@@ -34,6 +35,8 @@ export function Menu(props: {
   onCredits(): void;
 }) {
   const t = useT();
+  const soundReady = useAudioReady();
+  const { muted } = useSettings();
   const items: { key: Key; run(): void; primary?: boolean }[] = [
     { key: "start", run: props.onStart, primary: true },
     { key: "howToPlay", run: props.onHelp },
@@ -57,6 +60,7 @@ export function Menu(props: {
           </button>
         ))}
       </div>
+      {!soundReady && !muted && <p className="g3d-note g3d-soundhint">{t("soundHint")}</p>}
       <div className="g3d-menu-foot">
         <LangSwitch />
         <a className="g3d-link" href="/play2d">
@@ -259,7 +263,7 @@ export function SettingsScreen({ onBack, inGame = false }: { onBack(): void; inG
   );
 }
 
-export function HowToPlay({ touch, onBack }: { touch: boolean; onBack(): void }) {
+export function HowToPlay({ touch, onBack, onUpgrades }: { touch: boolean; onBack(): void; onUpgrades(): void }) {
   const t = useT();
   return (
     <div className="g3d-screen g3d-scroll">
@@ -318,10 +322,17 @@ export function HowToPlay({ touch, onBack }: { touch: boolean; onBack(): void })
           {WEAPON_IDS.map((id) => (
             <li key={id}>
               <span>{weaponName(id)}</span>
-              <span>{WEAPONS[id].unlockScore === 0 ? "—" : `${WEAPONS[id].unlockScore} ${t("pointsSuffix")}`}</span>
+              <span>{WEAPONS[id].unlockLevel <= 1 ? t("startFrom") : t("levelShort", { n: WEAPONS[id].unlockLevel })}</span>
             </li>
           ))}
         </ol>
+
+        <h3>{t("helpLevels")}</h3>
+        <p>{t("helpLevelsText")}</p>
+        {!touch && <p>{t("helpPickKeys")}</p>}
+        <button type="button" className="g3d-chip" onClick={onUpgrades}>
+          {t("viewUpgrades")}
+        </button>
 
         <h3>{t("helpTips")}</h3>
         <ul>
@@ -331,6 +342,35 @@ export function HowToPlay({ touch, onBack }: { touch: boolean; onBack(): void })
           <li>{t("helpTip4")}</li>
         </ul>
       </div>
+    </div>
+  );
+}
+
+/** Every level that gives something, like Boxhead's upgrade list. Rows you have reached are bright. */
+export function UpgradeList({ currentLevel, onBack }: { currentLevel?: number; onBack(): void }) {
+  const t = useT();
+  return (
+    <div className="g3d-screen g3d-scroll">
+      <Back onBack={onBack} />
+      <h2 className="g3d-h2">{t("upgradeList")}</h2>
+      <p className="g3d-note">
+        {t("upgradeListHint")}
+        {currentLevel !== undefined && <strong> {t("levelShort", { n: currentLevel })}</strong>}
+      </p>
+      <ol className="g3d-upgrades" aria-label={t("upgradeList")}>
+        {UPGRADE_LIST.map((e) => {
+          const isWeapon = e.reward.kind === "weapon";
+          const key = (WEAPON_IDS.indexOf(e.reward.weapon) + 1) % 10;
+          const text = e.reward.kind === "weapon" ? t("toastNewWeapon", { w: weaponName(e.reward.weapon), k: key }) : `${weaponName(e.reward.weapon)}+: ${upgradeName(e.reward.upgrade)}`;
+          const reached = currentLevel !== undefined && e.level <= currentLevel;
+          return (
+            <li key={e.level} className={`${isWeapon ? "weapon" : ""}${reached ? " reached" : ""}`}>
+              <span className="lv">{e.level}</span>
+              <span className="tx">{text}</span>
+            </li>
+          );
+        })}
+      </ol>
     </div>
   );
 }
@@ -368,6 +408,12 @@ export function GameOver({ run, onAgain, onMenu, onBoard }: { run: RunSummary; o
         <dd>{run.score}</dd>
         <dt>{t("statWave")}</dt>
         <dd>{run.wave}</dd>
+        {run.level !== undefined && (
+          <>
+            <dt>{t("statLevel")}</dt>
+            <dd>{run.level}</dd>
+          </>
+        )}
         <dt>{t("statKills")}</dt>
         <dd>{run.kills}</dd>
         <dt>{t("statTime")}</dt>

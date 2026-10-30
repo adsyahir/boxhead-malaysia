@@ -1,8 +1,10 @@
 import * as THREE from "three";
 import { createWorld, type GameEvent, type PlayerInput, type World } from "@kampung/game-core";
 import { applySnapshot, type RunResult, type Slot } from "@kampung/protocol";
+import { audio } from "../../game/audio/audio";
+import { DreadAudio } from "../../game/audio/dread";
 import type { RunSummary } from "../../game/constants";
-import { advance, newRunSeed } from "../../game/fixed-step";
+import { advance, newRunSeed, newTapCarry } from "../../game/fixed-step";
 import { DEFAULT_CHARACTERS, type Character } from "../../game/characters";
 import { buildHudState, setActiveCharacters, type HudState } from "../../game/hud-state";
 import { getSettings } from "../../settings/store";
@@ -67,8 +69,11 @@ export class Engine {
   private playerCount: 1 | 2 = 1;
   private keyboard: WindowKeyboard | null = null;
   /** Set while playing a room: the world is rebuilt from server snapshots instead of simulated here. */
-  private online: { link: OnlineClient; you: Slot; taps: number } | null = null;
+  private online: { link: OnlineClient; you: Slot; taps: number; sel: number | undefined } | null = null;
   private acc = 0;
+  private readonly taps = newTapCarry();
+  /** Heartbeat, drone and ghost voices that build as enemies get close to the hero. */
+  private readonly dread = new DreadAudio(() => audio.rig());
   private paused = false;
   private ended = false;
   private frames = 0;
@@ -117,7 +122,11 @@ export class Engine {
     const params = new URLSearchParams(window.location.search);
     const dbg = Number(params.get("zoom"));
     if (dbg > 0.1 && dbg < 4) this.cam.debugScale = dbg;
-    if (params.has("debug")) (window as unknown as { __kppWorld?: () => World | null }).__kppWorld = () => this.world;
+    if (params.has("debug")) {
+      const dbg2 = window as unknown as { __kppWorld?: () => World | null; __kppAudio?: () => unknown };
+      dbg2.__kppWorld = () => this.world;
+      dbg2.__kppAudio = () => ({ ready: audio.ready, ctx: audio.rig()?.ctx.state ?? null, level: audio.measureLevel(), ambience: audio.ambienceRunning, ambienceEvents: audio.ambienceEvents, dread: { ...this.dread.stats } });
+    }
 
     this.resizeObs = new ResizeObserver(() => this.resize());
     this.resizeObs.observe(host);
@@ -186,7 +195,7 @@ export class Engine {
     this.view.setCharacters(heroes);
     // The seed is irrelevant: every field the renderer reads is overwritten from snapshots.
     this.world = createWorld({ seed: 1, map: this.built.loaded.data, playerCount: 2 });
-    this.online = { link, you, taps: 0 };
+    this.online = { link, you, taps: 0, sel: undefined };
     this.acc = 0;
     this.paused = false;
     this.ended = false;
@@ -232,6 +241,7 @@ export class Engine {
     this.fx.dispose();
     this.floatText.dispose();
     this.lights.dispose();
+    this.dread.dispose();
     this.mats.dispose();
     // module-level shared geometries: dispose only frees GPU buffers, a later Engine re-uploads them
     UNIT_BOX.dispose();
@@ -277,6 +287,9 @@ export class Engine {
     this.keyboard?.destroy();
     this.keyboard = null;
     this.online = null;
+    this.dread.silence();
+    this.taps.select.length = 0;
+    this.taps.swap.length = 0;
     this.world = null;
     this.paused = false;
     this.ended = false;
@@ -323,6 +336,7 @@ export class Engine {
       score: e.score,
       wave: Math.max(1, e.wave),
       kills: e.kills,
+      level: this.world?.level,
       durationMs: e.durationMs,
       map: this.mapKey,
       mode: this.playerCount === 2 ? "2p" : "1p",
@@ -342,11 +356,14 @@ export class Engine {
     const sampled = this.sampleInputs();
     let events: GameEvent[] = [];
     if (this.online) events = this.stepOnline(world, sampled, nowMs);
-    else if (!this.paused && !this.ended) ({ acc: this.acc, events } = advance(world, sampled, this.acc, frameDt));
+    else if (!this.paused && !this.ended) ({ acc: this.acc, events } = advance(world, sampled, this.acc, frameDt, this.taps));
     this.fx.handle(events, world, nowMs);
     for (const e of events) if (e.type === "gameOver") this.finish(e);
 
     if (++this.frames % 6 === 0 || events.length > 0) this.publishHud();
+    const heroes = this.online ? world.players.filter((p, i) => p.alive && i === this.online!.you) : world.players.filter((p) => p.alive);
+    this.dread.update(world.enemies, heroes, frameDt, nowMs / 1000, !this.paused && !this.ended);
+
     if (this.frames % 20 === 0) {
       const d = this.canvas.dataset;
       d.tick = String(world.tick);
@@ -362,7 +379,9 @@ export class Engine {
     const mine = sampled.inputs[0];
     if (mine && !this.ended) {
       if (sampled.swapTapped[0]) o.taps++;
-      o.link.sendInput({ mx: mine.moveX, my: mine.moveY, fire: mine.fire, swap: mine.switchWeapon, taps: o.taps }, nowMs);
+      if (mine.select !== undefined) o.sel = mine.select; // keep a number-key pick until the next send actually goes out
+      const sent = o.link.sendInput({ mx: mine.moveX, my: mine.moveY, fire: mine.fire, swap: mine.switchWeapon, taps: o.taps, sel: o.sel }, nowMs);
+      if (sent) o.sel = undefined;
     }
     const out = o.link.buffer.sample(nowMs);
     if (!out) return [];
