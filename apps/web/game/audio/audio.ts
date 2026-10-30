@@ -1,19 +1,26 @@
 import type { WeaponId } from "@kampung/game-core";
-import { MUTE_KEY } from "../constants";
+import { getSettings, subscribeSettings, updateSettings } from "../../settings/store";
 
 /** Synthesised placeholder SFX (WebAudio). Real samples can replace `play` later. */
 class AudioManager {
   private ctx: AudioContext | null = null;
   private master: GainNode | null = null;
   private noiseBuf: AudioBuffer | null = null;
-  muted = false;
-
   constructor() {
-    try {
-      this.muted = localStorage.getItem(MUTE_KEY) === "1";
-    } catch {
-      this.muted = false;
-    }
+    subscribeSettings(() => this.applyGain());
+  }
+
+  get muted(): boolean {
+    return getSettings().muted;
+  }
+
+  private gain(): number {
+    const { muted, volume } = getSettings();
+    return muted ? 0 : volume * 0.6;
+  }
+
+  private applyGain(): void {
+    if (this.master) this.master.gain.value = this.gain();
   }
 
   /** Must be called from a user gesture. */
@@ -26,7 +33,7 @@ class AudioManager {
     if (!Ctor) return;
     this.ctx = new Ctor();
     this.master = this.ctx.createGain();
-    this.master.gain.value = this.muted ? 0 : 0.5;
+    this.master.gain.value = this.gain();
     this.master.connect(this.ctx.destination);
     const len = this.ctx.sampleRate;
     this.noiseBuf = this.ctx.createBuffer(1, len, this.ctx.sampleRate);
@@ -35,14 +42,8 @@ class AudioManager {
   }
 
   toggleMute(): boolean {
-    this.muted = !this.muted;
-    if (this.master) this.master.gain.value = this.muted ? 0 : 0.5;
-    try {
-      localStorage.setItem(MUTE_KEY, this.muted ? "1" : "0");
-    } catch {
-      /* storage unavailable: mute just won't persist */
-    }
-    return this.muted;
+    updateSettings({ muted: !getSettings().muted });
+    return getSettings().muted;
   }
 
   private tone(freq: number, dur: number, type: OscillatorType, vol: number, slideTo?: number): void {

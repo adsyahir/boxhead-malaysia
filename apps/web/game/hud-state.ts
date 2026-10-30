@@ -1,7 +1,10 @@
-import { WEAPONS, type GameEvent, type WeaponId, type World } from "@kampung/game-core";
+import { type GameEvent, type WeaponId, type World } from "@kampung/game-core";
+import { t, weaponName } from "../i18n";
+import { DEFAULT_CHARACTERS, characterName, type Character } from "./characters";
 
 export interface HudPlayer {
   name: string;
+  character: Character;
   hp: number;
   maxHp: number;
   alive: boolean;
@@ -23,14 +26,24 @@ export interface HudState {
 
 export const HUD_KEY = "hud";
 
-/** Shared by the Phaser and Three.js clients. */
-export const PLAYER_NAMES = ["Abu", "Siti"];
+/** Which hero each player slot uses in the current run (slot 0 = player 1). Set by the client that starts the run. */
+let activeCharacters: Character[] = DEFAULT_CHARACTERS;
+
+export function setActiveCharacters(chars: Character[]): void {
+  activeCharacters = chars.length > 0 ? chars : DEFAULT_CHARACTERS;
+}
+
+function nameOf(slot: number): string {
+  const c = activeCharacters[slot];
+  return c ? characterName(c) : t("playerFallback");
+}
 
 /** Read-only snapshot of the World for the HUD (both clients). */
 export function buildHudState(w: World, paused: boolean): HudState {
   return {
     players: w.players.map((p, i) => ({
-      name: PLAYER_NAMES[i] ?? `P${i + 1}`,
+      name: nameOf(i),
+      character: activeCharacters[i] ?? DEFAULT_CHARACTERS[i % 2]!,
       hp: p.hp,
       maxHp: p.maxHp,
       alive: p.alive,
@@ -50,25 +63,25 @@ export function buildHudState(w: World, paused: boolean): HudState {
 
 export function waveLabel(s: HudState): string {
   return s.phase === "break"
-    ? `Gelombang ${s.wave + 1} dalam ${Math.max(0, Math.ceil(s.breakTimer))}`
-    : `Gelombang ${s.wave}   Musuh ${s.enemiesLeft}`;
+    ? t("waveIn", { n: s.wave + 1, s: Math.max(0, Math.ceil(s.breakTimer)) })
+    : `${t("waveN", { n: s.wave })}   ${t("enemiesLeft", { n: s.enemiesLeft })}`;
 }
 
-/** Malay toast text for a GameEvent, or null when the event has none. */
+/** Localised toast text for a GameEvent, or null when the event has none. */
 export function eventToast(e: GameEvent): string | null {
   switch (e.type) {
     case "pickup":
-      return e.kind === "ketupat" ? "Ketupat! +30 HP" : "Peluru dikutip";
+      return e.kind === "ketupat" ? t("toastKetupat") : t("toastAmmo");
     case "waveStarted":
-      return `Gelombang ${e.wave}`;
+      return t("toastWaveStart", { n: e.wave });
     case "waveCleared":
-      return `Gelombang ${e.wave} selesai`;
+      return t("toastWaveClear", { n: e.wave });
     case "playerDowned":
-      return `${PLAYER_NAMES[e.id] ?? "Pemain"} tumbang!`;
+      return t("toastDown", { name: nameOf(e.id) });
     case "playerRevived":
-      return `${PLAYER_NAMES[e.id] ?? "Pemain"} bangkit semula`;
+      return t("toastRevive", { name: nameOf(e.id) });
     case "weaponUnlocked":
-      return `Senjata baru: ${WEAPONS[e.weapon].name}`;
+      return t("toastWeapon", { w: weaponName(e.weapon) });
     default:
       return null;
   }
