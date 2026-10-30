@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Browser, type Page } from "@playwright/test";
 
 function collectErrors(page: Page): string[] {
   const errors: string[] = [];
@@ -123,4 +123,87 @@ test("pause menu opens How to Play and Settings without ending the run", async (
   await expect(canvas).toHaveAttribute("data-scene", "Game");
   await pause.getByRole("button", { name: "Resume" }).click();
   await expect(page.locator(".g3d-pause")).toBeHidden();
+});
+
+async function openOnline(browser: Browser, name: string): Promise<Page> {
+  const ctx = await browser.newContext();
+  const page = await ctx.newPage();
+  await page.goto("/");
+  await page.getByRole("button", { name: /Mula/ }).click();
+  await page.getByRole("button", { name: /Dalam Talian/ }).click();
+  await page.getByLabel("Nama anda").fill(name);
+  return page;
+}
+
+test("online: two players create, join, ready up, start and move in the same world", async ({ browser }) => {
+  const host = await openOnline(browser, "Abu Test");
+  await host.getByRole("button", { name: "Cipta bilik peribadi" }).click();
+  const code = (await host.getByTestId("room-code").textContent())!.trim();
+  expect(code).toMatch(/^[A-HJKMNP-Z]{4}$/);
+
+  const guest = await openOnline(browser, "Siti Test");
+  await guest.getByPlaceholder("KOD").fill(code);
+  await guest.getByRole("button", { name: "Sertai", exact: true }).click();
+  await expect(guest.getByTestId("room-code")).toHaveText(code);
+  await expect(host.getByTestId("seat-1")).toContainText("Siti Test");
+
+  // host cannot start until the guest is ready
+  await expect(host.getByRole("button", { name: /Menunggu rakan bersedia/ })).toBeDisabled();
+  await guest.getByRole("button", { name: "Saya sedia" }).click();
+  await host.getByRole("button", { name: "Mula Permainan" }).click();
+
+  const hc = host.locator("canvas");
+  const gc = guest.locator("canvas");
+  await expect(hc).toHaveAttribute("data-scene", "Game", { timeout: 20_000 });
+  await expect(gc).toHaveAttribute("data-scene", "Game", { timeout: 20_000 });
+  await expect(hc).toHaveAttribute("data-slot", "0");
+  await expect(gc).toHaveAttribute("data-slot", "1");
+
+  const xs = async (p: Page) => ((await p.locator("canvas").getAttribute("data-players")) ?? "").split("|").map((s) => Number(s.split(",")[0]));
+  await expect.poll(async () => (await xs(host)).length).toBe(2);
+  const before = await xs(host);
+
+  await host.keyboard.down("d"); // host walks right, guest walks left
+  await guest.keyboard.down("a");
+  await host.waitForTimeout(2500);
+  await host.keyboard.up("d");
+  await guest.keyboard.up("a");
+  await host.waitForTimeout(600);
+
+  const [h0, h1] = await xs(host);
+  const [g0, g1] = await xs(guest);
+  expect(h0!).toBeGreaterThan(before[0]! + 100); // slot 0 moved right
+  expect(h1!).toBeLessThan(before[1]! - 100); // slot 1 moved left
+  // both clients show the same world, give or take network delay
+  expect(Math.abs(h0! - g0!)).toBeLessThan(60);
+  expect(Math.abs(h1! - g1!)).toBeLessThan(60);
+
+  await host.context().close();
+  await guest.context().close();
+});
+
+test("online: a room that does not exist, or a bad name, is refused with a clear message", async ({ browser }) => {
+  const page = await openOnline(browser, "Abu Test");
+  await page.getByPlaceholder("KOD").fill("ZZZZ");
+  await page.getByRole("button", { name: "Sertai", exact: true }).click();
+  await expect(page.locator(".g3d-error")).toContainText("Bilik tidak ditemui");
+
+  await page.getByLabel("Nama anda").fill("ab");
+  await expect(page.getByRole("button", { name: "Cipta bilik awam" })).toBeDisabled();
+  await page.context().close();
+});
+
+test("online: a public room shows up in the list and can be joined from it", async ({ browser }) => {
+  const host = await openOnline(browser, "Abu Test");
+  await host.getByRole("button", { name: "Cipta bilik awam" }).click();
+  const code = (await host.getByTestId("room-code").textContent())!.trim();
+
+  const guest = await openOnline(browser, "Siti Test");
+  const row = guest.locator(".g3d-roomrow", { hasText: code });
+  await expect(row).toBeVisible({ timeout: 15_000 });
+  await expect(row).toContainText("Abu Test");
+  await row.getByRole("button", { name: "Sertai" }).click();
+  await expect(guest.getByTestId("room-code")).toHaveText(code);
+  await host.context().close();
+  await guest.context().close();
 });
