@@ -12,6 +12,7 @@ import { isTouchDevice, sampleTouch } from "../../game/input/touch-state";
 import { parseTiledMap, type LoadedMap } from "../../game/maps";
 import { WindowKeyboard } from "../input/keyboard";
 import type { OnlineClient } from "../net/client";
+import { Predictor } from "../net/predictor";
 import { UNIT_BOX, UNIT_QUAD } from "./batch";
 import { CameraRig } from "./camera";
 import { toX, toZ } from "./coords";
@@ -69,7 +70,7 @@ export class Engine {
   private playerCount: 1 | 2 = 1;
   private keyboard: WindowKeyboard | null = null;
   /** Set while playing a room: the world is rebuilt from server snapshots instead of simulated here. */
-  private online: { link: OnlineClient; you: Slot; taps: number; sel: number | undefined } | null = null;
+  private online: { link: OnlineClient; you: Slot; taps: number; sel: number | undefined; predictor: Predictor | null } | null = null;
   private acc = 0;
   private readonly taps = newTapCarry();
   /** Heartbeat, drone and ghost voices that build as enemies get close to the hero. */
@@ -195,7 +196,17 @@ export class Engine {
     this.view.setCharacters(heroes);
     // The seed is irrelevant: every field the renderer reads is overwritten from snapshots.
     this.world = createWorld({ seed: 1, map: this.built.loaded.data, playerCount: 2 });
-    this.online = { link, you, taps: 0, sel: undefined };
+    // Your own hero is predicted: it moves locally at once and the server's position gently corrects it.
+    // (`?debug&predict=0` turns that off, to compare how it feels.)
+    const predicting = !(new URLSearchParams(window.location.search).has("debug") && new URLSearchParams(window.location.search).get("predict") === "0");
+    const predictor = predicting ? new Predictor(this.built.loaded.data) : null;
+    this.online = { link, you, taps: 0, sel: undefined, predictor };
+    if (predictor) {
+      link.onRawSnapshot = (snap, at) => {
+        const own = snap.players[you];
+        if (own) predictor.reconcile({ x: own.x, y: own.y, alive: own.alive, ack: own.ack }, { x: own.fx, y: own.fy }, at);
+      };
+    }
     this.acc = 0;
     this.paused = false;
     this.ended = false;
@@ -286,6 +297,7 @@ export class Engine {
     this.endTimer = null;
     this.keyboard?.destroy();
     this.keyboard = null;
+    if (this.online) this.online.link.onRawSnapshot = null;
     this.online = null;
     this.dread.silence();
     this.taps.select.length = 0;
@@ -369,7 +381,12 @@ export class Engine {
       d.tick = String(world.tick);
       d.players = world.players.map((p) => `${Math.round(p.x)},${Math.round(p.y)}`).join("|");
       d.ms = this.cpuMs.toFixed(2);
-      if (this.online) d.slot = String(this.online.you);
+      if (this.online) {
+        d.slot = String(this.online.you);
+        const st = this.online.predictor?.stats;
+        d.predict = this.online.predictor ? (this.online.predictor.active ? "on" : "idle") : "off";
+        if (st) d.predictErr = st.lastError.toFixed(1);
+      }
     }
   }
 
@@ -380,12 +397,26 @@ export class Engine {
     if (mine && !this.ended) {
       if (sampled.swapTapped[0]) o.taps++;
       if (mine.select !== undefined) o.sel = mine.select; // keep a number-key pick until the next send actually goes out
-      const sent = o.link.sendInput({ mx: mine.moveX, my: mine.moveY, fire: mine.fire, swap: mine.switchWeapon, taps: o.taps, sel: o.sel }, nowMs);
-      if (sent) o.sel = undefined;
+      const seq = o.link.sendInput({ mx: mine.moveX, my: mine.moveY, fire: mine.fire, swap: mine.switchWeapon, taps: o.taps, sel: o.sel }, nowMs);
+      if (seq !== null) {
+        o.sel = undefined;
+        o.predictor?.recordSent(seq, nowMs);
+      }
     }
     const out = o.link.buffer.sample(nowMs);
     if (!out) return [];
     applySnapshot(world, out.snap);
+    // Show your own hero where you moved it, not where the (older) snapshot had it.
+    const pr = o.predictor;
+    const me = world.players[o.you];
+    if (pr && me) {
+      pr.step(mine?.moveX ?? 0, mine?.moveY ?? 0, nowMs);
+      if (pr.active && me.alive) {
+        me.x = pr.body.x;
+        me.y = pr.body.y;
+        me.facing = pr.body.facing;
+      }
+    }
     // gameOver arrives as its own message; ignore the in-world copy so the UI hears it once.
     return out.events.filter((e) => e.type !== "gameOver");
   }

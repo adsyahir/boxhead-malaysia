@@ -1,4 +1,4 @@
-import { NET, SnapshotBuffer, type ErrorCode, type LobbyPlayer, type MapId, type RoomState, type RunResult, type ServerMsg, type Slot, type ClientMsg, type HeroId } from "@kampung/protocol";
+import { NET, SnapshotBuffer, type Snapshot, type ErrorCode, type LobbyPlayer, type MapId, type RoomState, type RunResult, type ServerMsg, type Slot, type ClientMsg, type HeroId } from "@kampung/protocol";
 import { wsUrl } from "./endpoint";
 
 export type LinkStatus = "idle" | "connecting" | "open" | "reconnecting" | "closed";
@@ -17,6 +17,8 @@ export interface ClientEvents {
   onLobby(l: LobbyView, you: Slot): void;
   onStart(s: { map: MapId; heroes: HeroId[]; you: Slot }): void;
   onOver(run: RunResult): void;
+  /** The room server stored (or failed to store) the finished team score. */
+  onSaved(rank: number | null): void;
   onError(code: ErrorCode, msg: string): void;
 }
 
@@ -31,6 +33,10 @@ export class OnlineClient {
   status: LinkStatus = "idle";
   /** Round-trip time of the last ping, in ms. */
   rtt = 0;
+  /** Called with every snapshot the moment it arrives (not delayed like the playback buffer): used to reconcile prediction. */
+  onRawSnapshot: ((snap: Snapshot, atMs: number) => void) | null = null;
+  /** Debug only (`?debug&lag=120`): delay everything this many ms each way, to feel a slow connection. */
+  private readonly lagMs = debugLag();
 
   private ws: WebSocket | null = null;
   private name = "";
@@ -81,7 +87,7 @@ export class OnlineClient {
       this.setStatus("open");
       this.startPing();
     };
-    ws.onmessage = (e) => this.handle(e.data);
+    ws.onmessage = (e) => (this.lagMs > 0 ? void setTimeout(() => this.handle(e.data), this.lagMs) : this.handle(e.data));
     ws.onclose = () => {
       if (this.ws !== ws) return;
       this.ws = null;
@@ -146,11 +152,17 @@ export class OnlineClient {
         this.buffer.clear();
         this.ev.onStart({ map: m.map, heroes: m.heroes, you: m.you });
         return;
-      case "snap":
-        this.buffer.push(performance.now(), m.s, m.e);
+      case "snap": {
+        const at = performance.now();
+        this.onRawSnapshot?.(m.s, at);
+        this.buffer.push(at, m.s, m.e);
         return;
+      }
       case "over":
         this.ev.onOver(m.run);
+        return;
+      case "saved":
+        this.ev.onSaved(m.rank);
         return;
       case "error":
         if (m.code === "bad_name" || m.code === "no_room" || m.code === "room_full" || m.code === "in_progress") this.token = "";
@@ -163,15 +175,21 @@ export class OnlineClient {
   }
 
   send(msg: ClientMsg): void {
-    if (this.ws?.readyState === WebSocket.OPEN) this.ws.send(JSON.stringify(msg));
+    const text = JSON.stringify(msg);
+    const go = () => {
+      if (this.ws?.readyState === WebSocket.OPEN) this.ws.send(text);
+    };
+    if (this.lagMs > 0) setTimeout(go, this.lagMs);
+    else go();
   }
 
-  /** Called every frame; sends at most NET.inputHz per second. Returns whether this call actually sent. */
-  sendInput(i: { mx: number; my: number; fire: boolean; swap: boolean; taps: number; sel?: number }, nowMs: number): boolean {
-    if (nowMs - this.lastInputAt < 1000 / NET.inputHz) return false;
+  /** Called every frame; sends at most NET.inputHz per second. Returns the sequence number it sent, or null if it was too soon. */
+  sendInput(i: { mx: number; my: number; fire: boolean; swap: boolean; taps: number; sel?: number }, nowMs: number): number | null {
+    if (nowMs - this.lastInputAt < 1000 / NET.inputHz) return null;
     this.lastInputAt = nowMs;
-    this.send({ t: "input", seq: ++this.seq, mx: i.mx, my: i.my, fire: i.fire, swap: i.swap, taps: i.taps, ...(i.sel !== undefined ? { sel: i.sel } : {}) });
-    return true;
+    const seq = ++this.seq;
+    this.send({ t: "input", seq, mx: i.mx, my: i.my, fire: i.fire, swap: i.swap, taps: i.taps, ...(i.sel !== undefined ? { sel: i.sel } : {}) });
+    return seq;
   }
 
   /** Leave on purpose: gives up the seat. */
@@ -198,4 +216,12 @@ export class OnlineClient {
     }
     this.setStatus("closed");
   }
+}
+
+function debugLag(): number {
+  if (typeof window === "undefined") return 0;
+  const q = new URLSearchParams(window.location.search);
+  if (!q.has("debug")) return 0;
+  const n = Number(q.get("lag"));
+  return Number.isFinite(n) && n > 0 && n <= 2000 ? n : 0;
 }
