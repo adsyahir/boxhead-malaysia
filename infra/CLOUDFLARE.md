@@ -7,7 +7,7 @@ code in `apps/server`) serves the static website and also runs the online rooms.
 |---|---|---|
 | Website and game (static export of `apps/web`) | Worker static assets | ready |
 | Online rooms (no login, 2 players, code or public list) | Durable Objects: one `RoomDO` per room, one `LobbyDO` registry | ready, tested locally |
-| Leaderboard + database | Worker + D1 (SQLite) | planned |
+| Leaderboard + database | Worker + D1 (SQLite), `/api/scores` | ready, tested locally |
 
 ## One-time setup (you do this, it needs your Cloudflare login)
 
@@ -22,6 +22,15 @@ code in `apps/server`) serves the static website and also runs the online rooms.
    ```
    It prints your URL, like `https://hantu-kampung-pisang.<your-subdomain>.workers.dev`. Open it and play. Open it on a
    second device, create a room on one and join from the other with the 4-letter code.
+
+## The leaderboard database (D1)
+
+`apps/server/wrangler.jsonc` declares a D1 database called `hantu-kampung-pisang` bound as `DB`. Locally wrangler creates it for you. On your first `corepack pnpm deploy`, recent wrangler versions create the database on your account automatically; if yours asks for a `database_id`, run `cd apps/server && npx wrangler d1 create hantu-kampung-pisang`, paste the id into `wrangler.jsonc`, and deploy again. The table is created by the Worker the first time it is used, so there is no migration step.
+
+- `POST /api/scores` takes a finished 1P or 2P run (nickname, score, wave, kills, map, mode, durationMs). It is checked against the same limits as the game (`validateRun`), the level must match the kills, and each sender may store 5 scores a minute.
+- Online scores are never accepted from a browser. The room server saves the team score itself when a game ends, which is why those cannot be faked.
+- `GET /api/scores?map=&mode=&limit=50` returns the best first and is cached for 30 seconds.
+- See and clear data: `cd apps/server && npx wrangler d1 execute DB --remote --command "SELECT * FROM scores ORDER BY score DESC LIMIT 20"`.
 
 ## Custom domain (optional)
 
