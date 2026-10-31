@@ -159,6 +159,9 @@ test("online: two players create, join, ready up, start and move in the same wor
   await expect(gc).toHaveAttribute("data-scene", "Game", { timeout: 20_000 });
   await expect(hc).toHaveAttribute("data-slot", "0");
   await expect(gc).toHaveAttribute("data-slot", "1");
+  // your own hero is predicted locally (reacts at once); the server position corrects it gently
+  await expect(hc).toHaveAttribute("data-predict", "on", { timeout: 10_000 });
+  await expect(gc).toHaveAttribute("data-predict", "on", { timeout: 10_000 });
 
   const xs = async (p: Page) => ((await p.locator("canvas").getAttribute("data-players")) ?? "").split("|").map((s) => Number(s.split(",")[0]));
   await expect.poll(async () => (await xs(host)).length).toBe(2);
@@ -286,4 +289,178 @@ test("menu soundscape waits for a key press, then plays; the game stays quiet un
   await expect.poll(async () => (await audio()).dread.intensity).toBeGreaterThan(0.5);
   await expect.poll(async () => (await audio()).dread.beats, { timeout: 10_000 }).toBeGreaterThan(1);
   expect(errors).toEqual([]);
+});
+
+test("keyboard: Tab shows a visible focus ring, and small controls are at least 44px", async ({ page }) => {
+  await page.goto("/");
+  await expect(page.getByRole("button", { name: /Mula/ })).toBeVisible({ timeout: 30_000 });
+  await page.keyboard.press("Tab");
+  const ring = await page.evaluate(() => {
+    const el = document.activeElement as HTMLElement;
+    const cs = getComputedStyle(el);
+    return { tag: el.tagName, style: cs.outlineStyle, width: cs.outlineWidth };
+  });
+  expect(ring.tag).toBe("BUTTON");
+  expect(ring.style).not.toBe("none");
+  expect(parseFloat(ring.width)).toBeGreaterThanOrEqual(3);
+
+  await page.getByRole("button", { name: /Tetapan/ }).click();
+  for (const sel of [".lang-switch button", ".g3d-chip", ".g3d-back", ".g3d-btn.slim"]) {
+    const box = await page.locator(sel).first().boundingBox();
+    expect(box, sel).not.toBeNull();
+    expect(box!.height, `${sel} height`).toBeGreaterThanOrEqual(44);
+    expect(box!.width, `${sel} width`).toBeGreaterThanOrEqual(44);
+  }
+});
+
+test("pause menu is a dialog: focus moves into it, Esc closes it", async ({ page }) => {
+  await page.goto("/");
+  await expect(page.getByRole("button", { name: /Mula/ })).toBeVisible({ timeout: 30_000 });
+  await page.getByRole("button", { name: /Mula/ }).click();
+  await page.getByRole("button", { name: /1 Pemain/ }).click();
+  await page.getByRole("button", { name: /Abu/ }).click();
+  await page.getByRole("button", { name: /Kampung Pisang/ }).click();
+  await expect(page.locator("canvas")).toHaveAttribute("data-scene", "Game", { timeout: 20_000 });
+  await page.keyboard.press("Escape");
+  const dialog = page.getByRole("dialog", { name: "JEDA" });
+  await expect(dialog).toBeVisible();
+  await expect.poll(() => page.evaluate(() => !!document.activeElement?.closest('[role="dialog"]'))).toBe(true);
+  await page.keyboard.press("Escape");
+  await expect(dialog).toBeHidden();
+});
+
+test("online lobby: every control works (copy, map, hero, leave)", async ({ browser }) => {
+  const ctx = await browser.newContext();
+  await ctx.grantPermissions(["clipboard-read", "clipboard-write"]);
+  const host = await ctx.newPage();
+  await host.goto("/");
+  await host.getByRole("button", { name: /Mula/ }).click({ timeout: 30_000 });
+  await host.getByRole("button", { name: /Dalam Talian/ }).click();
+  await host.getByLabel("Nama anda").fill("Abu Test");
+  await host.getByRole("button", { name: "Muat semula" }).click(); // refresh the room list: no error, list stays sensible
+  await host.getByRole("button", { name: "Cipta bilik peribadi" }).click();
+  const code = (await host.getByTestId("room-code").textContent())!.trim();
+
+  await host.getByRole("button", { name: "Salin kod" }).click();
+  await expect(host.getByRole("button", { name: "Disalin!" }).first()).toBeVisible();
+  expect(await host.evaluate(() => navigator.clipboard.readText())).toBe(code);
+  await host.getByRole("button", { name: "Salin pautan" }).click();
+  expect(await host.evaluate(() => navigator.clipboard.readText())).toContain(`/?room=${code}`);
+
+  await host.getByRole("button", { name: "Kebun Getah" }).click();
+  await expect(host.getByRole("button", { name: "Kebun Getah" })).toHaveAttribute("aria-pressed", "true");
+  await expect(host.getByRole("button", { name: "Kampung Pisang" })).toHaveAttribute("aria-pressed", "false");
+
+  await host.getByRole("button", { name: "Siti", exact: true }).click();
+  await expect(host.getByTestId("seat-0")).toContainText("Siti");
+
+  await host.getByRole("button", { name: "Keluar bilik" }).click();
+  await expect(host.getByRole("heading", { name: "Main Dalam Talian" })).toBeVisible();
+  await ctx.close();
+});
+
+const API = "http://localhost:8787";
+const randomIp = () => `10.${Math.floor(Math.random() * 250)}.${Math.floor(Math.random() * 250)}.${Math.floor(Math.random() * 250)}`;
+const run = { nickname: "Api Tester", score: 5000, wave: 3, kills: 30, map: "kampung-pisang", mode: "1p", durationMs: 90_000 };
+
+test("leaderboard API: stores a valid score, refuses cheats, rate-limits, and lists the best first", async ({ request }) => {
+  const ip = randomIp();
+  const post = (body: unknown, h: Record<string, string> = { "cf-connecting-ip": ip }) => request.post(`${API}/api/scores`, { data: body, headers: h });
+
+  const ok = await post({ ...run, nickname: `Api${Date.now() % 1_000_000}`, score: 7777 });
+  expect(ok.status()).toBe(201);
+  expect(((await ok.json()) as { rank: number }).rank).toBeGreaterThanOrEqual(1);
+
+  expect((await post({ ...run, score: 99_999_999 })).status()).toBe(400); // more than any run could earn
+  expect((await post({ ...run, durationMs: 1000 })).status()).toBe(400); // wave 3 in one second
+  expect((await post({ ...run, mode: "online" })).status()).toBe(400); // online scores come from the room server only
+  expect((await post({ ...run, nickname: "ab" })).status()).toBe(400);
+
+  const list = await request.get(`${API}/api/scores?map=kampung-pisang&mode=1p&limit=100`);
+  expect(list.status()).toBe(200);
+  expect(list.headers()["cache-control"]).toContain("max-age=30");
+  const { scores } = (await list.json()) as { scores: { rank: number; score: number }[] };
+  expect(scores.some((s) => s.score === 7777)).toBe(true);
+  for (let i = 1; i < scores.length; i++) expect(scores[i - 1]!.score).toBeGreaterThanOrEqual(scores[i]!.score);
+
+  // the same sender gets 5 stored scores a minute (1 already used above)
+  for (let i = 0; i < 4; i++) expect((await post({ ...run, score: 1000 + i })).status()).toBe(201);
+  expect((await post({ ...run, score: 2000 })).status()).toBe(429);
+  expect((await post({ ...run, score: 2000 }, { "cf-connecting-ip": randomIp() })).status()).toBe(201); // someone else is fine
+});
+
+test("game over: submit a score with a nickname, then find it on the leaderboard", async ({ page }) => {
+  await page.goto("/?debug");
+  await expect(page.getByRole("button", { name: /Mula/ })).toBeVisible({ timeout: 30_000 });
+  await page.getByRole("button", { name: /Mula/ }).click();
+  await page.getByRole("button", { name: /1 Pemain/ }).click();
+  await page.getByRole("button", { name: /Abu/ }).click();
+  await page.getByRole("button", { name: /Kampung Pisang/ }).click();
+  await expect(page.locator("canvas")).toHaveAttribute("data-scene", "Game", { timeout: 20_000 });
+
+  // end the run now with a believable result: 40 s played, 3 kills, 1,234 points
+  await page.evaluate(() => {
+    const w = (window as unknown as { __kppWorld: () => { time: number; kills: number; score: number; players: { hp: number; alive: boolean }[] } }).__kppWorld();
+    w.time = 40;
+    w.kills = 3;
+    w.score = 1234;
+    w.players[0]!.hp = 0;
+    w.players[0]!.alive = false;
+  });
+  await expect(page.getByRole("heading", { name: "TAMAT" })).toBeVisible({ timeout: 15_000 });
+
+  const nick = `E2E ${String(Date.now()).slice(-6)}`;
+  await expect(page.getByRole("button", { name: "Hantar markah" })).toBeDisabled(); // no name yet
+  await page.getByLabel("Nama anda").fill(nick);
+  await page.getByRole("button", { name: "Hantar markah" }).click();
+  await expect(page.getByText(/Markah dihantar\. Kedudukan anda: #\d+/)).toBeVisible({ timeout: 15_000 });
+
+  await page.getByRole("link", { name: "Lihat Papan Markah" }).click();
+  await expect(page.getByRole("heading", { name: "Papan Markah" })).toBeVisible();
+  await expect(page.getByRole("row", { name: new RegExp(nick) })).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByRole("row", { name: new RegExp(nick) })).toContainText("1,234");
+});
+
+test("game over: a failed submit says so and can be retried with the run kept", async ({ page }) => {
+  await page.goto("/?debug");
+  await expect(page.getByRole("button", { name: /Mula/ })).toBeVisible({ timeout: 30_000 });
+  await page.getByRole("button", { name: /Mula/ }).click();
+  await page.getByRole("button", { name: /1 Pemain/ }).click();
+  await page.getByRole("button", { name: /Abu/ }).click();
+  await page.getByRole("button", { name: /Kampung Pisang/ }).click();
+  await expect(page.locator("canvas")).toHaveAttribute("data-scene", "Game", { timeout: 20_000 });
+  await page.evaluate(() => {
+    const w = (window as unknown as { __kppWorld: () => { time: number; kills: number; score: number; players: { hp: number; alive: boolean }[] } }).__kppWorld();
+    w.time = 40;
+    w.kills = 3;
+    w.score = 4321;
+    w.players[0]!.hp = 0;
+    w.players[0]!.alive = false;
+  });
+  await expect(page.getByRole("heading", { name: "TAMAT" })).toBeVisible({ timeout: 15_000 });
+
+  await page.route("**/api/scores", (r) => r.abort());
+  await page.getByLabel("Nama anda").fill(`Retry ${String(Date.now()).slice(-5)}`);
+  await page.getByRole("button", { name: "Hantar markah" }).click();
+  await expect(page.locator(".g3d-error")).toContainText("Tak dapat hantar markah, cuba lagi");
+
+  await page.unroute("**/api/scores");
+  await page.getByRole("button", { name: "Cuba lagi" }).click();
+  await expect(page.getByText(/Markah dihantar/)).toBeVisible({ timeout: 15_000 });
+});
+
+test("leaderboard page: loading, empty and error states, with a retry", async ({ page }) => {
+  await page.route("**/api/scores?*", (r) => r.abort());
+  await page.goto("/leaderboard");
+  await expect(page.locator(".g3d-error")).toContainText("Tidak dapat memuatkan papan markah");
+  await page.unroute("**/api/scores?*");
+
+  await page.route("**/api/scores?*", (r) => r.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ scores: [] }) }));
+  await page.getByRole("button", { name: "Cuba lagi" }).click();
+  await expect(page.getByText("Belum ada markah di sini")).toBeVisible();
+
+  await page.getByRole("button", { name: "Dalam Talian" }).click();
+  await page.getByRole("button", { name: "Kebun Getah" }).click();
+  await expect(page.getByRole("button", { name: "Kebun Getah" })).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByRole("button", { name: "Dalam Talian" })).toHaveAttribute("aria-pressed", "true");
 });
