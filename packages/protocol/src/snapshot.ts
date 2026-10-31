@@ -16,6 +16,8 @@ export interface SnapPlayer {
   w: number;
   /** -1 = unlimited */
   ammo: number;
+  /** Highest input sequence number the server has received from this player: lets a client reconcile its prediction. */
+  ack?: number;
 }
 
 export interface Snapshot {

@@ -42,7 +42,7 @@ export interface RunResult {
   /** Team level reached. */
   level: number;
   durationMs: number;
-  map: string;
+  map: MapId;
 }
 
 export type ErrorCode = "bad_message" | "no_room" | "room_full" | "bad_name" | "not_host" | "not_ready" | "in_progress" | "rate_limited" | "busy";
@@ -101,6 +101,8 @@ export type ServerMsg =
   | { t: "start"; map: MapId; seed: number; heroes: HeroId[]; you: Slot }
   | { t: "snap"; s: Snapshot; e: GameEvent[] }
   | { t: "over"; run: RunResult }
+  /** The team score of the finished online run was stored (rank in the online board for that map), or could not be (null). */
+  | { t: "saved"; rank: number | null }
   | { t: "error"; code: ErrorCode; msg: string }
   | { t: "pong"; n: number };
 
