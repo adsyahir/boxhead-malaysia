@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { NET } from "@kampung/protocol";
+import { createBoxMap } from "@kampung/game-core";
+import { RoomLogic } from "../src/room-logic";
 import { FakeConn, input, makeRoom, runFor, startedGame } from "./helpers";
 
 describe("joining", () => {
@@ -203,5 +205,94 @@ describe("direct weapon pick over the network", () => {
     // Uzi is locked at level 1, so the pick is ignored and Lastik stays selected
     expect(a.last("snap")!.s.players[0]!.w).toBe(0);
     expect(a.last("snap")!.s.level).toBe(1);
+  });
+});
+
+describe("saving the online score", () => {
+  function savedGame(save: (run: unknown, names: string[]) => Promise<number | null>) {
+    const clock = { ms: 1_000 };
+    let n = 0;
+    const room = new RoomLogic({
+      code: "ABCD",
+      public: true,
+      now: () => clock.ms,
+      loadMap: () => createBoxMap(60, 40),
+      seed: () => 12345,
+      token: () => `tok${++n}`,
+      onChange: () => undefined,
+      saveScore: save as never,
+    });
+    const a = new FakeConn();
+    const b = new FakeConn();
+    room.join(a, "Abu");
+    room.join(b, "Siti");
+    room.message(1, { t: "ready", ready: true });
+    room.message(0, { t: "start" });
+    return { room, a, b, clock };
+  }
+
+  async function finishRun(g: ReturnType<typeof savedGame>) {
+    // player 1 leaves, player 0 stands still until the ghosts get them
+    g.room.disconnect(1, g.b);
+    for (let i = 0; i < 400 && g.room.phase === "playing"; i++) {
+      for (let t = 0; t < 1000; t += 100) {
+        g.clock.ms += 100;
+        g.room.tick();
+      }
+    }
+    await Promise.resolve();
+    await Promise.resolve();
+  }
+
+  it("hands the finished run and both names to saveScore, then tells the players the rank", async () => {
+    const calls: { run: unknown; names: string[] }[] = [];
+    const g = savedGame(async (run, names) => {
+      calls.push({ run, names });
+      return 4;
+    });
+    await finishRun(g);
+    expect(g.room.phase).toBe("over");
+    expect(calls).toHaveLength(1);
+    expect(calls[0]!.names).toEqual(["Abu", "Siti"]);
+    expect(calls[0]!.run).toMatchObject({ map: "kampung-pisang" });
+    expect(g.a.last("saved")).toEqual({ t: "saved", rank: 4 });
+  });
+
+  it("tells the players it could not be saved when the write fails", async () => {
+    const g = savedGame(async () => {
+      throw new Error("db down");
+    });
+    await finishRun(g);
+    expect(g.a.last("saved")).toEqual({ t: "saved", rank: null });
+  });
+
+  it("says nothing about saving when there is no leaderboard configured", async () => {
+    const { rig, a, b } = startedGame();
+    rig.room.disconnect(1, b);
+    for (let i = 0; i < 400 && rig.room.phase === "playing"; i++) runFor(rig, 1000, 100);
+    expect(rig.room.phase).toBe("over");
+    expect(a.of("saved")).toHaveLength(0);
+  });
+});
+
+describe("input acknowledgement (for client-side prediction)", () => {
+  it("echoes the highest input sequence each player has sent in every snapshot", () => {
+    const { rig, a, b } = startedGame();
+    rig.room.message(0, input({ seq: 5, mx: 1 }));
+    rig.room.message(1, input({ seq: 9, mx: -1 }));
+    rig.room.message(0, input({ seq: 7, mx: 1 }));
+    rig.room.message(0, input({ seq: 6, mx: 0 })); // an old, reordered message never lowers the ack
+    runFor(rig, 200);
+    const s = a.last("snap")!.s;
+    expect(s.players[0]!.ack).toBe(7);
+    expect(s.players[1]!.ack).toBe(9);
+    expect(b.last("snap")!.s.players[0]!.ack).toBe(7);
+  });
+
+  it("starts again from zero in a new game", () => {
+    const { rig, a } = startedGame();
+    rig.room.message(0, input({ seq: 40 }));
+    runFor(rig, 100);
+    expect(a.last("snap")!.s.players[0]!.ack).toBe(40);
   });
 });

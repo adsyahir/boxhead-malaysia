@@ -1,12 +1,15 @@
 import { CreateRoomSchema, ROOM_CODE_RE, parseClientMsg, type ServerMsg, type Slot } from "@kampung/protocol";
+import { D1ScoreStore } from "./d1-store";
 import { LobbyLogic } from "./lobby-logic";
 import { loadMap } from "./maps";
 import { RoomLogic, type Conn, type RoomSummary } from "./room-logic";
+import { QuerySchema, saveOnlineScore, submitScore } from "./scores";
 
 interface Env {
   ROOM: DurableObjectNamespace;
   LOBBY: DurableObjectNamespace;
   ASSETS: Fetcher;
+  DB: D1Database;
 }
 
 const json = (body: unknown, status = 200, extra: HeadersInit = {}): Response =>
@@ -35,6 +38,7 @@ export default {
     const url = new URL(req.url);
     if (url.pathname === "/ws") return handleSocket(req, env, url);
     if (url.pathname === "/api/rooms") return handleRooms(req, env, url);
+    if (url.pathname === "/api/scores") return handleScores(req, env, url);
     return env.ASSETS.fetch(req);
   },
 } satisfies ExportedHandler<Env>;
@@ -75,6 +79,47 @@ async function handleRooms(req: Request, env: Env, url: URL): Promise<Response> 
   return json({ error: "busy" }, 503, headers);
 }
 
+const MAX_SCORE_BODY = 1024;
+
+async function sha256Hex(text: string): Promise<string> {
+  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(`kpp:${text}`));
+  return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+/** GET: the top scores for a board (cached 30 s). POST: submit a score from a finished 1P or 2P run. */
+async function handleScores(req: Request, env: Env, url: URL): Promise<Response> {
+  const origin = allowedOrigin(req, url);
+  if (origin === null) return json({ error: "forbidden" }, 403);
+  const headers = cors(origin);
+  if (req.method === "OPTIONS") return new Response(null, { status: 204, headers });
+  const store = new D1ScoreStore(env.DB);
+
+  try {
+    if (req.method === "GET") {
+      const q = QuerySchema.safeParse(Object.fromEntries(url.searchParams));
+      if (!q.success) return json({ error: "bad_request" }, 400, headers);
+      const rows = await store.top(q.data.map ?? null, q.data.mode ?? null, q.data.limit);
+      return json({ scores: rows.map((r, i) => ({ rank: i + 1, ...r })) }, 200, { ...headers, "cache-control": "public, max-age=30" });
+    }
+    if (req.method !== "POST") return json({ error: "method" }, 405, headers);
+
+    const text = await req.text();
+    if (text.length > MAX_SCORE_BODY) return json({ error: "too_large" }, 413, headers);
+    let body: unknown;
+    try {
+      body = JSON.parse(text);
+    } catch {
+      return json({ error: "bad_request" }, 400, headers);
+    }
+    const ip = req.headers.get("cf-connecting-ip") ?? "local";
+    const result = await submitScore(store, body, await sha256Hex(ip), Date.now());
+    if (result.ok) return json({ rank: result.rank }, 201, headers);
+    return json({ error: result.status === 429 ? "rate_limited" : "invalid", reason: result.reason }, result.status, headers);
+  } catch {
+    return json({ error: "unavailable" }, 503, headers);
+  }
+}
+
 async function handleSocket(req: Request, env: Env, url: URL): Promise<Response> {
   if (req.headers.get("upgrade")?.toLowerCase() !== "websocket") return new Response("Expected a websocket", { status: 426 });
   if (allowedOrigin(req, url) === null) return new Response("Forbidden", { status: 403 });
@@ -113,6 +158,11 @@ export class RoomDO {
       seed: () => crypto.getRandomValues(new Uint32Array(1))[0]!,
       token: () => crypto.randomUUID(),
       onChange: (s) => this.report(s),
+      saveScore: (run, names) => {
+        const saving = saveOnlineScore(new D1ScoreStore(this.env.DB), run, names, Date.now());
+        this.state.waitUntil(saving.catch(() => undefined)); // keep the room alive until the write finishes
+        return saving;
+      },
     });
   }
 

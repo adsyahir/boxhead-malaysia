@@ -15,5 +15,6 @@
       { "name": "LOBBY", "class_name": "LobbyDO" }
     ]
   },
+  "d1_databases": [{ "binding": "DB", "database_name": "hantu-kampung-pisang" }],
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["RoomDO", "LobbyDO"] }]
 }

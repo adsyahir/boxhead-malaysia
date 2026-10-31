@@ -20,6 +20,7 @@ import {
   type LobbyPlayer,
   type MapId,
   type RoomState,
+  type RunResult,
   type ServerMsg,
   type Slot,
 } from "@kampung/protocol";
@@ -49,6 +50,8 @@ export interface RoomDeps {
   token(): string;
   /** The lobby registry wants to know when the room changes. */
   onChange(summary: RoomSummary): void;
+  /** Store the finished run in the online leaderboard. Resolves to the rank, or null if it was not stored. */
+  saveScore?(run: RunResult, names: string[]): Promise<number | null>;
 }
 
 interface Seat {
@@ -67,6 +70,8 @@ interface Seat {
   tapsDone: number;
   /** A direct weapon pick (keys 1 to 0) waiting for the next tick; applied once. */
   pendingSelect: number | undefined;
+  /** Highest input sequence number received, echoed in snapshots so the client can reconcile its prediction. */
+  ackSeq: number;
   lastSwitch: boolean;
   /** Message budget, refilled over time, so a flooding client is dropped. */
   bucket: number;
@@ -138,7 +143,7 @@ export class RoomLogic {
     const hero = HERO_IDS.find((h) => !taken.has(h)) ?? "abu";
     const seat: Seat = {
       name: trimmed, hero, ready: false, token: this.d.token(), conn, lostAt: null,
-      mx: 0, my: 0, fire: false, swap: false, taps: 0, tapsDone: 0, pendingSelect: undefined, lastSwitch: false,
+      mx: 0, my: 0, fire: false, swap: false, taps: 0, tapsDone: 0, pendingSelect: undefined, ackSeq: 0, lastSwitch: false,
       bucket: BUCKET_MAX, bucketAt: this.d.now(),
     };
     this.seats[free] = seat;
@@ -208,6 +213,7 @@ export class RoomLogic {
         seat.conn.send({ t: "pong", n: msg.n });
         return;
       case "input":
+        if (msg.seq > seat.ackSeq) seat.ackSeq = msg.seq;
         seat.mx = msg.mx;
         seat.my = msg.my;
         seat.fire = msg.fire;
@@ -275,6 +281,7 @@ export class RoomLogic {
       s.ready = false;
       s.taps = s.tapsDone = 0;
       s.pendingSelect = undefined;
+      s.ackSeq = 0;
       s.lastSwitch = false;
       s.mx = s.my = 0;
       s.fire = s.swap = false;
@@ -333,7 +340,12 @@ export class RoomLogic {
 
   private broadcastSnapshot(): void {
     if (!this.world) return;
-    const msg: ServerMsg = { t: "snap", s: snapshotWorld(this.world), e: this.pendingEvents };
+    const snap = snapshotWorld(this.world);
+    snap.players.forEach((p, i) => {
+      const seat = this.seats[i];
+      if (seat) p.ack = seat.ackSeq;
+    });
+    const msg: ServerMsg = { t: "snap", s: snap, e: this.pendingEvents };
     this.pendingEvents = [];
     for (const s of this.seats) s?.conn?.send(msg);
   }
@@ -345,7 +357,19 @@ export class RoomLogic {
     const run = { score: w.score, wave: Math.max(1, w.wave), kills: w.kills, level: w.level, durationMs: Math.round((this.d.now() - this.startedAt)), map: this.map };
     for (const s of this.seats) s?.conn?.send({ t: "over", run });
     this.world = null;
+    this.saveRun(run);
     this.notify();
+  }
+
+  /** The server ran this game itself, so it records the team score; players are told whether it was stored. */
+  private saveRun(run: RunResult): void {
+    const save = this.d.saveScore;
+    if (!save) return;
+    const names = this.seats.filter((s): s is Seat => s !== null).map((s) => s.name);
+    const tell = (rank: number | null) => {
+      for (const s of this.seats) s?.conn?.send({ t: "saved", rank });
+    };
+    save(run, names).then(tell, () => tell(null));
   }
 
   private backToLobby(): void {
