@@ -1,17 +1,12 @@
-import { BALANCE } from "../data/balance";
 import { weaponStats } from "../data/progression";
 import { PLACEABLE, WEAPONS } from "../data/weapons";
-import { circleHitsWall, moveCircle, pointSolid } from "../map/collision";
+import { circleHitsWall, pointSolid } from "../map/collision";
 import { rangeFloat } from "../rng";
 import { WEAPON_IDS, type GameEvent, type Player, type PlayerInput, type Vec, type World } from "../types";
 import { damageEnemy } from "./combat";
+import { movePlayer } from "./movement";
 
 const IDLE: PlayerInput = { moveX: 0, moveY: 0, fire: false, switchWeapon: false };
-
-function snap8(x: number, y: number): Vec {
-  const a = Math.round(Math.atan2(y, x) / (Math.PI / 4)) * (Math.PI / 4);
-  return { x: Math.cos(a), y: Math.sin(a) };
-}
 
 function hasAmmo(p: Player, w: World, id: (typeof WEAPON_IDS)[number]): boolean {
   return w.unlocked.includes(id) && p.ammo[id] > 0;
@@ -32,19 +27,7 @@ export function updatePlayers(w: World, inputs: PlayerInput[], dt: number, ev: G
     if (!p.alive) return;
     const input = inputs[i] ?? IDLE;
 
-    let mx = input.moveX;
-    let my = input.moveY;
-    const len = Math.hypot(mx, my);
-    if (len > 1) {
-      mx /= len;
-      my /= len;
-    }
-    if (len > 0.01) {
-      p.facing = snap8(mx, my);
-      const next = moveCircle(w.map, p.x, p.y, p.radius, mx * BALANCE.playerSpeed * dt, my * BALANCE.playerSpeed * dt);
-      p.x = next.x;
-      p.y = next.y;
-    }
+    movePlayer(w.map, p, input.moveX, input.moveY, dt);
 
     if (input.select !== undefined) {
       const wanted = WEAPON_IDS[input.select];
