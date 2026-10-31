@@ -55,7 +55,7 @@ export default function Hud({ hud, touch, toast, muted, onMute, onPause, onExit,
       ))}
       <div className="g3d-center">
         <div className="g3d-score">{t("score")} {hud.score}</div>
-        <div className="g3d-level" key={hud.level}>
+        <div className="g3d-level" key={`level-${hud.level}`}>
           <span>{t("levelShort", { n: hud.level })}</span>
           <div
             className="g3d-xp"
@@ -70,7 +70,7 @@ export default function Hud({ hud, touch, toast, muted, onMute, onPause, onExit,
         </div>
         <div className="g3d-wave">{waveLabel(hud)}</div>
         {hud.combo > 1 && (
-          <div className="g3d-combo" key={hud.combo}>
+          <div className="g3d-combo" key={`combo-${hud.combo}`}>
             {t("combo", { n: hud.combo })}
           </div>
         )}
