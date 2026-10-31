@@ -13,7 +13,9 @@ import type { Key } from "../i18n";
 import { useSettings, useT } from "../settings/react";
 import { createRoom, listRooms } from "./net/api";
 import { OnlineClient, type LinkStatus, type LobbyView } from "./net/client";
+import Dialog from "./ui/Dialog";
 import Hud from "./ui/Hud";
+import { SoundOffIcon, SoundOnIcon } from "./ui/Icons";
 import { Lobby, OnlineMenu, nameIsValid } from "./ui/OnlineScreens";
 import { CharacterSelect, Credits, GameOver, HowToPlay, MapSelect, Menu, ModeSelect, SettingsScreen, UpgradeList } from "./ui/Screens";
 import TouchControls from "./ui/TouchControls";
@@ -31,8 +33,8 @@ const ERROR_KEY: Record<ErrorCode, Key> = {
   no_room: "errNoRoom",
   room_full: "errFull",
   bad_name: "errBadName",
-  not_host: "errGeneric",
-  not_ready: "errGeneric",
+  not_host: "errNotHost",
+  not_ready: "errNotReady",
   in_progress: "errInProgress",
   rate_limited: "errRate",
   busy: "errBusy",
@@ -107,6 +109,8 @@ export default function Game3D() {
   const [isOnline, setIsOnline] = useState(false);
   const isOnlineRef = useRef(false);
   isOnlineRef.current = isOnline;
+  /** Online run: undefined until the room server says whether the team score was stored. */
+  const [savedRank, setSavedRank] = useState<number | null | undefined>(undefined);
   const [onlineMenu, setOnlineMenu] = useState(false);
   const onlineMenuRef = useRef(false);
   onlineMenuRef.current = onlineMenu;
@@ -208,6 +212,7 @@ export default function Game3D() {
       setRun(null);
       setHud(null);
       setCharacters(s.heroes);
+      setSavedRank(undefined);
       setIsOnline(true);
       go("Game");
       const e = engine.current;
@@ -239,6 +244,7 @@ export default function Game3D() {
           if (screenRef.current !== "Game") startOnlineGame(st);
         },
         onOver: (r) => engine.current?.endOnlineRun(r),
+        onSaved: (rank) => setSavedRank(rank),
         onError: (code2, _msg) => {
           setNetError(ERROR_KEY[code2]);
           setBusy(false);
@@ -553,11 +559,11 @@ export default function Game3D() {
         />
       )}
       {screen === "Game" && overlay && (
-        <div className="g3d-ingame">
+        <Dialog className="g3d-ingame" label={overlay === "Help" ? t("howToPlay") : overlay === "Settings" ? t("settings") : t("upgradeList")}>
           {overlay === "Help" && <HowToPlay touch={touch} onBack={() => setOverlay(null)} onUpgrades={() => setOverlay("Upgrades")} />}
           {overlay === "Settings" && <SettingsScreen inGame onBack={() => setOverlay(null)} />}
           {overlay === "Upgrades" && <UpgradeList currentLevel={hud?.level} onBack={() => setOverlay(null)} />}
-        </div>
+        </Dialog>
       )}
       {screen === "Settings" && <SettingsScreen onBack={() => go("Menu")} />}
       {screen === "Help" && <HowToPlay touch={touch} onBack={() => go("Menu")} onUpgrades={() => go("Upgrades")} />}
@@ -566,6 +572,7 @@ export default function Game3D() {
       {screen === "GameOver" && run && (
         <GameOver
           run={run}
+          savedRank={savedRank}
           onAgain={() => (run.mode === "online" ? netRef.current?.send({ t: "ready", ready: false }) : startGame(run.map, run.mode === "2p" ? 2 : 1, characters))}
           onMenu={run.mode === "online" ? leaveRoomToMenu : toMenu}
           onBoard={toBoard}
@@ -573,7 +580,7 @@ export default function Game3D() {
       )}
       {screen !== "Game" && (
         <button type="button" className="g3d-icon g3d-mute-float" onClick={toggleMute} aria-label={muted ? t("unmute") : t("mute")}>
-          {muted ? "🔇" : "🔊"}
+          {muted ? <SoundOffIcon /> : <SoundOnIcon />}
         </button>
       )}
       {(isOnline || screen === "Lobby") && (screen === "Game" || screen === "GameOver" || screen === "Lobby") && linkStatus !== "open" && linkStatus !== "idle" && (

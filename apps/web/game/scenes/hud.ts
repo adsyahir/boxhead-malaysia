@@ -1,5 +1,6 @@
 import * as Phaser from "phaser";
-import { WEAPONS, WEAPON_IDS } from "@kampung/game-core";
+import { t, weaponName } from "../../i18n";
+import { WEAPON_IDS } from "@kampung/game-core";
 import { audio } from "../audio/audio";
 import { HUD_KEY, waveLabel, type HudState } from "../hud-state";
 import { TouchControls, isTouchDevice } from "../input/touch";
@@ -34,7 +35,7 @@ export class HudScene extends Phaser.Scene {
     this.combo = this.add.text(0, 0, "", { ...style, fontSize: "22px", color: "#ffd24a", fontStyle: "bold" }).setOrigin(0.5, 0);
     this.unlocks = this.add.text(0, 0, "", { ...style, fontSize: "11px" }).setOrigin(0.5, 1);
     this.toastText = this.add.text(0, 0, "", { ...style, fontSize: "24px", fontStyle: "bold" }).setOrigin(0.5).setAlpha(0);
-    this.pause = this.add.text(0, 0, "JEDA\nP atau Esc untuk sambung", { ...style, fontSize: "30px", align: "center", fontStyle: "bold" }).setOrigin(0.5).setVisible(false);
+    this.pause = this.add.text(0, 0, `${t("paused")}\n${t("resumeKeys")}`, { ...style, fontSize: "30px", align: "center", fontStyle: "bold" }).setOrigin(0.5).setVisible(false);
     this.mute = this.add.text(0, 6, "", { fontSize: "22px" }).setOrigin(1, 0).setInteractive({ useHandCursor: true });
     this.mute.on("pointerdown", () => {
       audio.unlock();
@@ -50,7 +51,7 @@ export class HudScene extends Phaser.Scene {
   override update(_t: number, delta: number): void {
     const s = this.registry.get(HUD_KEY) as HudState | undefined;
     const { width, height } = this.scale;
-    this.mute.setText(audio.muted ? "🔇" : "🔊").setX(width - 10);
+    this.mute.setText(audio.muted ? t("soundOff") : t("soundOn")).setX(width - 10);
     this.touch?.draw();
     if (!s) return;
 
@@ -65,7 +66,7 @@ export class HudScene extends Phaser.Scene {
       g.fillStyle(frac > 0.35 ? 0x48c048 : 0xd03030).fillRect(x, y + 18, BAR_W * frac, 8);
       const ammo = Number.isFinite(p.ammo) ? String(p.ammo) : "∞";
       this.playerTexts[i]!
-        .setText(`${p.name}${p.alive ? "" : " (tumbang)"}\n${WEAPONS[p.weapon].name} ${ammo}`)
+        .setText(`${p.name}${p.alive ? "" : ` ${t("down")}`}\n${weaponName(p.weapon)} ${ammo}`)
         .setPosition(x, y + (p.alive ? 0 : 0))
         .setLineSpacing(14)
         .setY(y - 2);
@@ -73,11 +74,11 @@ export class HudScene extends Phaser.Scene {
     });
     for (let i = s.players.length; i < this.playerTexts.length; i++) this.playerTexts[i]!.setVisible(false);
 
-    this.score.setText(`Markah ${s.score}`).setPosition(width / 2, 8);
+    this.score.setText(`${t("score")} ${s.score}`).setPosition(width / 2, 8);
     this.wave.setText(waveLabel(s)).setPosition(width / 2, 34);
-    this.combo.setText(s.combo > 1 ? `Kombo x${s.combo}` : "").setPosition(width / 2, 56);
+    this.combo.setText(s.combo > 1 ? t("combo", { n: s.combo }) : "").setPosition(width / 2, 56);
 
-    const row = WEAPON_IDS.map((id, i) => (s.unlocked.includes(id) ? `${(i + 1) % 10}.${WEAPONS[id].name}` : `${(i + 1) % 10}.---`)).join("  ");
+    const row = WEAPON_IDS.map((id, i) => (s.unlocked.includes(id) ? `${(i + 1) % 10}.${weaponName(id)}` : `${(i + 1) % 10}.---`)).join("  ");
     this.unlocks.setText(row).setPosition(width / 2, height - 6).setVisible(!this.touch);
 
     this.pause.setPosition(width / 2, height / 2).setVisible(s.paused);

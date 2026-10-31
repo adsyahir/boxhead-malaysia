@@ -5,6 +5,8 @@ import { waveLabel, type HudState } from "../../game/hud-state";
 import { HEROES, hex } from "../../game/characters";
 import { weaponName } from "../../i18n";
 import { useT } from "../../settings/react";
+import Dialog from "./Dialog";
+import { PauseIcon, SoundOffIcon, SoundOnIcon } from "./Icons";
 
 interface Props {
   hud: HudState;
@@ -75,10 +77,10 @@ export default function Hud({ hud, touch, toast, muted, onMute, onPause, onExit,
       </div>
       <div className="g3d-corner">
         <button type="button" className="g3d-icon" tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={onPause} aria-label={t("pause")}>
-          ❚❚
+          <PauseIcon />
         </button>
         <button type="button" className="g3d-icon" tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={onMute} aria-label={muted ? t("unmute") : t("mute")}>
-          {muted ? "🔇" : "🔊"}
+          {muted ? <SoundOffIcon /> : <SoundOnIcon />}
         </button>
       </div>
       {!touch && (
@@ -96,7 +98,7 @@ export default function Hud({ hud, touch, toast, muted, onMute, onPause, onExit,
         </div>
       )}
       {hud.paused && !confirmExit && (
-        <div className="g3d-pause">
+        <Dialog className="g3d-pause" label={t("paused")}>
           <div className="g3d-pause-title">{online ? t("onlineMenuTitle") : t("paused")}</div>
           {online && <div className="g3d-pause-hint">{t("onlineMenuNote")}</div>}
           <div className="g3d-pause-actions">
@@ -117,7 +119,7 @@ export default function Hud({ hud, touch, toast, muted, onMute, onPause, onExit,
             </button>
           </div>
           {!touch && <div className="g3d-pause-hint">{t("resumeKeys")}</div>}
-        </div>
+        </Dialog>
       )}
       {confirmExit && (
         <div className="g3d-pause g3d-confirm" role="alertdialog" aria-labelledby="leave-title" aria-describedby="leave-body">

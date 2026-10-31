@@ -89,6 +89,7 @@ export function OnlineMenu(props: {
           </button>
         </form>
 
+        {props.busy && <p className="g3d-note" role="status">{t("connecting")}</p>}
         {props.error && <p className="g3d-error" role="alert">{t(props.error)}</p>}
 
         <div className="g3d-rooms">

@@ -10,6 +10,7 @@ import { resetSettings, updateSettings, type Quality } from "../../settings/stor
 import { useAudioReady } from "../../game/audio/use-audio-ready";
 import { useSettings, useT } from "../../settings/react";
 import LangSwitch from "./LangSwitch";
+import ScoreSubmit from "./ScoreSubmit";
 
 const MAP_BLURBS: Record<string, Key> = {
   "kampung-pisang": "mapKampungBlurb",
@@ -298,8 +299,8 @@ export function HowToPlay({ touch, onBack, onUpgrades }: { touch: boolean; onBac
               </tr>
               <tr>
                 <td>{t("helpSwap")}</td>
-                <td>G / Q / K / Shift ›</td>
-                <td>Shift ›</td>
+                <td>G / Q / K / {t("keyRightShift")}</td>
+                <td>{t("keyRightShift")}</td>
               </tr>
               <tr>
                 <td>{t("helpPauseMute")}</td>
@@ -396,7 +397,20 @@ export function Credits({ onBack }: { onBack(): void }) {
   );
 }
 
-export function GameOver({ run, onAgain, onMenu, onBoard }: { run: RunSummary; onAgain(): void; onMenu(): void; onBoard(): void }) {
+export function GameOver({
+  run,
+  savedRank,
+  onAgain,
+  onMenu,
+  onBoard,
+}: {
+  run: RunSummary;
+  /** Online runs: undefined while the server is still saving, a rank when stored, null when it could not be. */
+  savedRank?: number | null;
+  onAgain(): void;
+  onMenu(): void;
+  onBoard(): void;
+}) {
   const online = run.mode === "online";
   const t = useT();
   const secs = Math.round(run.durationMs / 1000);
@@ -421,6 +435,16 @@ export function GameOver({ run, onAgain, onMenu, onBoard }: { run: RunSummary; o
           {Math.floor(secs / 60)}m {secs % 60}s
         </dd>
       </dl>
+      {online ? (
+        // an empty run (0 points) is never stored, so there is nothing to report
+        run.score > 0 && (
+          <p className="g3d-note" role="status">
+            {savedRank === undefined ? t("onlineSaving") : savedRank === null ? t("onlineNotSaved") : t("onlineSaved", { rank: savedRank })}
+          </p>
+        )
+      ) : (
+        <ScoreSubmit run={run} />
+      )}
       <div className="g3d-buttons">
         <button type="button" className="g3d-btn primary" onClick={onAgain}>
           {online ? t("backToRoom") : t("playAgain")}
@@ -428,11 +452,9 @@ export function GameOver({ run, onAgain, onMenu, onBoard }: { run: RunSummary; o
         <button type="button" className="g3d-btn" onClick={onMenu}>
           {t("menu")}
         </button>
-        {!online && (
-          <button type="button" className="g3d-btn" onClick={onBoard}>
-            {t("leaderboard")}
-          </button>
-        )}
+        <button type="button" className="g3d-btn" onClick={onBoard}>
+          {t("leaderboard")}
+        </button>
       </div>
     </div>
   );
