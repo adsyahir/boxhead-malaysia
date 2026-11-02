@@ -34,8 +34,8 @@ code in `apps/server`) serves the static website and also runs the online rooms.
 
 ## Custom domain
 
-`apps/server/wrangler.jsonc` declares `hantu-kampung-pisang.adsyahir.com` as a Worker Custom Domain (`routes` with
-`custom_domain: true`), so every deploy attaches it and Cloudflare manages its DNS record. Do not also add a CNAME or A
+`apps/server/wrangler.jsonc` declares `boxhead-hantu-kampung-pisang.adsyahir.com` (main) and the older
+`hantu-kampung-pisang.adsyahir.com` as Worker Custom Domains (`routes` with `custom_domain: true`), so every deploy attaches it and Cloudflare manages its DNS record. Do not also add a CNAME or A
 record for that name by hand: a hand-made record that points at the `workers.dev` name gives error 1016 (the whole site,
 including score submit, fails) and makes the deploy refuse to attach the domain. To use another domain, change the pattern;
 the domain's zone must be on the same Cloudflare account.

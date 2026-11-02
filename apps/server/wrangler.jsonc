@@ -3,7 +3,11 @@
   "name": "hantu-kampung-pisang",
   "main": "src/worker.ts",
   "compatibility_date": "2026-10-01",
-  "routes": [{ "pattern": "hantu-kampung-pisang.adsyahir.com", "custom_domain": true }],
+  // Main address first; the old one stays so Home Screen icons and links made before the rename keep working.
+  "routes": [
+    { "pattern": "boxhead-hantu-kampung-pisang.adsyahir.com", "custom_domain": true },
+    { "pattern": "hantu-kampung-pisang.adsyahir.com", "custom_domain": true }
+  ],
   // Keep the *.workers.dev address too, as a backup when the custom domain has trouble.
   "workers_dev": true,
   "assets": {
