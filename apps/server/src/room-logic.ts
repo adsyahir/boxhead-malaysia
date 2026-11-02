@@ -64,6 +64,8 @@ interface Seat {
   lostAt: number | null;
   mx: number;
   my: number;
+  ax: number;
+  ay: number;
   fire: boolean;
   swap: boolean;
   taps: number;
@@ -143,7 +145,7 @@ export class RoomLogic {
     const hero = HERO_IDS.find((h) => !taken.has(h)) ?? "abu";
     const seat: Seat = {
       name: trimmed, hero, ready: false, token: this.d.token(), conn, lostAt: null,
-      mx: 0, my: 0, fire: false, swap: false, taps: 0, tapsDone: 0, pendingSelect: undefined, ackSeq: 0, lastSwitch: false,
+      mx: 0, my: 0, ax: 0, ay: 0, fire: false, swap: false, taps: 0, tapsDone: 0, pendingSelect: undefined, ackSeq: 0, lastSwitch: false,
       bucket: BUCKET_MAX, bucketAt: this.d.now(),
     };
     this.seats[free] = seat;
@@ -216,6 +218,8 @@ export class RoomLogic {
         if (msg.seq > seat.ackSeq) seat.ackSeq = msg.seq;
         seat.mx = msg.mx;
         seat.my = msg.my;
+        seat.ax = msg.ax ?? 0;
+        seat.ay = msg.ay ?? 0;
         seat.fire = msg.fire;
         seat.swap = msg.swap;
         if (msg.taps > seat.taps) seat.taps = msg.taps;
@@ -283,7 +287,7 @@ export class RoomLogic {
       s.pendingSelect = undefined;
       s.ackSeq = 0;
       s.lastSwitch = false;
-      s.mx = s.my = 0;
+      s.mx = s.my = s.ax = s.ay = 0;
       s.fire = s.swap = false;
     }
     this.seats.forEach((s, i) => s?.conn?.send({ t: "start", map: this.map, seed: 0, heroes: this.heroes(), you: i as Slot }));
@@ -307,7 +311,7 @@ export class RoomLogic {
       s.lastSwitch = sw;
       const select = s.pendingSelect;
       s.pendingSelect = undefined;
-      return { moveX: s.mx, moveY: s.my, fire: s.fire, switchWeapon: sw, ...(select !== undefined ? { select } : {}) };
+      return { moveX: s.mx, moveY: s.my, aimX: s.ax, aimY: s.ay, fire: s.fire, switchWeapon: sw, ...(select !== undefined ? { select } : {}) };
     });
   }
 

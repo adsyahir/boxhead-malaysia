@@ -131,6 +131,15 @@ describe("running game", () => {
     expect(b.of("snap").length).toBe(snaps.length);
   });
 
+  it("an aim stick turns the hero to face it while walking another way", () => {
+    const { rig, a } = startedGame();
+    rig.room.message(0, input({ mx: 1, ax: 0, ay: -1 }));
+    runFor(rig, 300);
+    const me = a.last("snap")!.s.players[0]!;
+    expect(me.fx).toBeCloseTo(0, 3);
+    expect(me.fy).toBeCloseTo(-1, 3);
+  });
+
   it("clients get the same state", () => {
     const { rig, a, b } = startedGame();
     runFor(rig, 500);

@@ -61,6 +61,9 @@ export const ClientMsgSchema = z.discriminatedUnion("t", [
     seq: z.number().int().min(0).max(2_000_000_000),
     mx: num.min(-1).max(1),
     my: num.min(-1).max(1),
+    /** Twin-stick aim (touch right stick). Omitted when not aiming: facing then follows movement. */
+    ax: num.min(-1).max(1).optional(),
+    ay: num.min(-1).max(1).optional(),
     fire: z.boolean(),
     swap: z.boolean(),
     /** Counts weapon-swap key presses, so a tap shorter than one input interval is not lost. */
