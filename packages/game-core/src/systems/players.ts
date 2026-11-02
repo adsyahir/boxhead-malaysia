@@ -27,7 +27,7 @@ export function updatePlayers(w: World, inputs: PlayerInput[], dt: number, ev: G
     if (!p.alive) return;
     const input = inputs[i] ?? IDLE;
 
-    movePlayer(w.map, p, input.moveX, input.moveY, dt);
+    movePlayer(w.map, p, input.moveX, input.moveY, dt, input.aimX, input.aimY);
 
     if (input.select !== undefined) {
       const wanted = WEAPON_IDS[input.select];

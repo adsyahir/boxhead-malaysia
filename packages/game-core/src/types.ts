@@ -12,6 +12,12 @@ export type PlayerInput = {
   moveY: number;
   fire: boolean;
   switchWeapon: boolean;
+  /**
+   * Twin-stick aim (touch right stick), -1..1 per axis. When its length is at least AIM_DEAD_ZONE the player faces
+   * this exact direction instead of the way they walk. Omitted or zero: facing follows movement (Boxhead style).
+   */
+  aimX?: number;
+  aimY?: number;
   /** Pick a weapon directly: 0..9 for keys 1..9, 0 (index into WEAPON_IDS). Ignored if locked or out of ammo. */
   select?: number;
 };

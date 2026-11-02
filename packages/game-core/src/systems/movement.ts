@@ -16,11 +16,18 @@ export interface Walker {
   facing: Vec;
 }
 
+/** An aim stick shorter than this is ignored, so a quick tap on Fire shoots the way the player already faces. */
+export const AIM_DEAD_ZONE = 0.25;
+
 /**
- * One tick of player movement: the stick is clamped to length 1, facing snaps to 8 directions, and the player slides
- * along walls. The simulation and a predicting client both call this, so they cannot drift apart.
+ * One tick of player movement: the stick is clamped to length 1, facing snaps to 8 directions (or follows the aim
+ * stick exactly when it is pushed), and the player slides along walls. The simulation and a predicting client both
+ * call this, so they cannot drift apart.
  */
-export function movePlayer(map: MapData, p: Walker, moveX: number, moveY: number, dt: number): void {
+export function movePlayer(map: MapData, p: Walker, moveX: number, moveY: number, dt: number, aimX = 0, aimY = 0): void {
+  const aimLen = Math.hypot(aimX, aimY);
+  const aiming = aimLen >= AIM_DEAD_ZONE;
+  if (aiming) p.facing = { x: aimX / aimLen, y: aimY / aimLen };
   let mx = moveX;
   let my = moveY;
   const len = Math.hypot(mx, my);
@@ -29,7 +36,7 @@ export function movePlayer(map: MapData, p: Walker, moveX: number, moveY: number
     my /= len;
   }
   if (len <= 0.01) return;
-  p.facing = snap8(mx, my);
+  if (!aiming) p.facing = snap8(mx, my);
   const next = moveCircle(map, p.x, p.y, p.radius, mx * BALANCE.playerSpeed * dt, my * BALANCE.playerSpeed * dt);
   p.x = next.x;
   p.y = next.y;

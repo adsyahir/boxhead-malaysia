@@ -45,6 +45,7 @@ export function advanceFrame(
       return {
         moveX: inp.moveX,
         moveY: inp.moveY,
+        ...(inp.aimX !== undefined ? { aimX: inp.aimX, aimY: inp.aimY ?? 0 } : {}),
         fire: inp.fire,
         switchWeapon: inp.switchWeapon || (first && carry.swap[i] === true),
         ...(select !== undefined ? { select } : {}),

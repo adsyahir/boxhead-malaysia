@@ -10,4 +10,4 @@ export * from "./data/waves";
 export * from "./data/weapons";
 export * from "./data/progression";
 export * from "./frame";
-export { movePlayer, snap8, type Walker } from "./systems/movement";
+export { AIM_DEAD_ZONE, movePlayer, snap8, type Walker } from "./systems/movement";
