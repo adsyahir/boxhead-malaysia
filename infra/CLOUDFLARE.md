@@ -39,6 +39,8 @@ code in `apps/server`) serves the static website and also runs the online rooms.
 record for that name by hand: a hand-made record that points at the `workers.dev` name gives error 1016 (the whole site,
 including score submit, fails) and makes the deploy refuse to attach the domain. To use another domain, change the pattern;
 the domain's zone must be on the same Cloudflare account.
+`workers_dev: true` keeps `https://hantu-kampung-pisang.<subdomain>.workers.dev` working as a backup; without it, a
+config with a route turns that address off.
 
 ## Automatic deploys from GitHub
 

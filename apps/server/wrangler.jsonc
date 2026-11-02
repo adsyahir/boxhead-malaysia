@@ -4,6 +4,8 @@
   "main": "src/worker.ts",
   "compatibility_date": "2026-10-01",
   "routes": [{ "pattern": "hantu-kampung-pisang.adsyahir.com", "custom_domain": true }],
+  // Keep the *.workers.dev address too, as a backup when the custom domain has trouble.
+  "workers_dev": true,
   "assets": {
     "directory": "../web/out",
     "binding": "ASSETS",
