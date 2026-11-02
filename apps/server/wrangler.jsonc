@@ -3,6 +3,7 @@
   "name": "hantu-kampung-pisang",
   "main": "src/worker.ts",
   "compatibility_date": "2026-10-01",
+  "routes": [{ "pattern": "hantu-kampung-pisang.adsyahir.com", "custom_domain": true }],
   "assets": {
     "directory": "../web/out",
     "binding": "ASSETS",

@@ -32,9 +32,13 @@ code in `apps/server`) serves the static website and also runs the online rooms.
 - `GET /api/scores?map=&mode=&limit=50` returns the best first and is cached for 30 seconds.
 - See and clear data: `cd apps/server && npx wrangler d1 execute DB --remote --command "SELECT * FROM scores ORDER BY score DESC LIMIT 20"`.
 
-## Custom domain (optional)
+## Custom domain
 
-Add your domain to Cloudflare (Websites, Add a domain), then Workers & Pages, hantu-kampung-pisang, Settings, Domains & Routes, Add, Custom domain.
+`apps/server/wrangler.jsonc` declares `hantu-kampung-pisang.adsyahir.com` as a Worker Custom Domain (`routes` with
+`custom_domain: true`), so every deploy attaches it and Cloudflare manages its DNS record. Do not also add a CNAME or A
+record for that name by hand: a hand-made record that points at the `workers.dev` name gives error 1016 (the whole site,
+including score submit, fails) and makes the deploy refuse to attach the domain. To use another domain, change the pattern;
+the domain's zone must be on the same Cloudflare account.
 
 ## Automatic deploys from GitHub
 
