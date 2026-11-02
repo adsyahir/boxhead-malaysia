@@ -397,7 +397,7 @@ export class Engine {
     if (mine && !this.ended) {
       if (sampled.swapTapped[0]) o.taps++;
       if (mine.select !== undefined) o.sel = mine.select; // keep a number-key pick until the next send actually goes out
-      const seq = o.link.sendInput({ mx: mine.moveX, my: mine.moveY, fire: mine.fire, swap: mine.switchWeapon, taps: o.taps, sel: o.sel }, nowMs);
+      const seq = o.link.sendInput({ mx: mine.moveX, my: mine.moveY, ax: mine.aimX, ay: mine.aimY, fire: mine.fire, swap: mine.switchWeapon, taps: o.taps, sel: o.sel }, nowMs);
       if (seq !== null) {
         o.sel = undefined;
         o.predictor?.recordSent(seq, nowMs);
@@ -410,7 +410,7 @@ export class Engine {
     const pr = o.predictor;
     const me = world.players[o.you];
     if (pr && me) {
-      pr.step(mine?.moveX ?? 0, mine?.moveY ?? 0, nowMs);
+      pr.step(mine?.moveX ?? 0, mine?.moveY ?? 0, nowMs, mine?.aimX, mine?.aimY);
       if (pr.active && me.alive) {
         me.x = pr.body.x;
         me.y = pr.body.y;

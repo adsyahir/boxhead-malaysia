@@ -184,11 +184,12 @@ export class OnlineClient {
   }
 
   /** Called every frame; sends at most NET.inputHz per second. Returns the sequence number it sent, or null if it was too soon. */
-  sendInput(i: { mx: number; my: number; fire: boolean; swap: boolean; taps: number; sel?: number }, nowMs: number): number | null {
+  sendInput(i: { mx: number; my: number; ax?: number; ay?: number; fire: boolean; swap: boolean; taps: number; sel?: number }, nowMs: number): number | null {
     if (nowMs - this.lastInputAt < 1000 / NET.inputHz) return null;
     this.lastInputAt = nowMs;
     const seq = ++this.seq;
-    this.send({ t: "input", seq, mx: i.mx, my: i.my, fire: i.fire, swap: i.swap, taps: i.taps, ...(i.sel !== undefined ? { sel: i.sel } : {}) });
+    const aim = i.ax || i.ay ? { ax: i.ax ?? 0, ay: i.ay ?? 0 } : {};
+    this.send({ t: "input", seq, mx: i.mx, my: i.my, ...aim, fire: i.fire, swap: i.swap, taps: i.taps, ...(i.sel !== undefined ? { sel: i.sel } : {}) });
     return seq;
   }
 

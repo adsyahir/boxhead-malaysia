@@ -53,14 +53,14 @@ export class Predictor {
     this.active = false;
   }
 
-  /** Advance the local hero to `nowMs` with the current stick, in the same fixed 60 Hz steps the server uses. */
-  step(moveX: number, moveY: number, nowMs: number): void {
+  /** Advance the local hero to `nowMs` with the current sticks, in the same fixed 60 Hz steps the server uses. */
+  step(moveX: number, moveY: number, nowMs: number, aimX = 0, aimY = 0): void {
     if (!this.active) return;
     this.acc += Math.min(Math.max(0, nowMs - this.lastMs), PREDICT.maxCatchUpMs);
     this.lastMs = nowMs;
     const stepMs = BALANCE.dt * 1000;
     while (this.acc >= stepMs) {
-      movePlayer(this.map, this.body, moveX, moveY, BALANCE.dt);
+      movePlayer(this.map, this.body, moveX, moveY, BALANCE.dt, aimX, aimY);
       this.acc -= stepMs;
     }
     this.history.push({ t: nowMs, x: this.body.x, y: this.body.y });

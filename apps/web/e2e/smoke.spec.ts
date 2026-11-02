@@ -101,6 +101,50 @@ test("phone landscape: menu, heroes and maps fit on one screen; icon and manifes
   }
 });
 
+test("touch: dragging the Fire stick aims and shoots that way while the left stick walks", async ({ browser }) => {
+  const ctx = await browser.newContext({ viewport: { width: 740, height: 360 }, hasTouch: true, isMobile: true });
+  const page = await ctx.newPage();
+  await page.goto("/?debug");
+  await page.getByRole("button", { name: /Mula/ }).click({ timeout: 30_000 });
+  await page.getByRole("button", { name: /1 Pemain/ }).click();
+  await page.getByRole("button", { name: /Abu/ }).click();
+  await page.getByRole("button", { name: /Kampung Pisang/ }).click();
+  await expect(page.locator("canvas")).toHaveAttribute("data-scene", "Game", { timeout: 20_000 });
+  await expect.poll(() => page.locator("canvas").getAttribute("data-tick").then(Number), { timeout: 10_000 }).toBeGreaterThan(30);
+  const res = await page.evaluate(async () => {
+    const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
+    const layer = document.querySelector(".g3d-touch")!;
+    const r = layer.getBoundingClientRect();
+    const fire = { x: r.left + r.width - 90, y: r.top + r.height - 100 };
+    const stick = { x: r.left + 110, y: r.top + r.height - 110 };
+    const ev = (type: string, id: number, x: number, y: number) =>
+      layer.dispatchEvent(new PointerEvent(type, { pointerId: id, pointerType: "touch", clientX: x, clientY: y, bubbles: true }));
+    const world = () => (window as unknown as { __kppWorld(): { players: { x: number; facing: { x: number; y: number } }[]; projectiles: { vx: number; vy: number }[] } }).__kppWorld();
+    const x0 = world().players[0]!.x;
+    ev("pointerdown", 1, stick.x, stick.y);
+    ev("pointermove", 1, stick.x + 50, stick.y); // walk right
+    ev("pointerdown", 2, fire.x, fire.y);
+    ev("pointermove", 2, fire.x, fire.y - 50); // aim up
+    await wait(700);
+    const w = world();
+    const out = {
+      moved: w.players[0]!.x - x0,
+      facing: w.players[0]!.facing,
+      upShots: w.projectiles.filter((b) => b.vy < 0 && Math.abs(b.vx) < 1).length,
+      knob: document.querySelector(".g3d-knob.aim") !== null,
+    };
+    ev("pointerup", 1, 0, 0);
+    ev("pointerup", 2, 0, 0);
+    return out;
+  });
+  expect(res.moved).toBeGreaterThan(40);
+  expect(res.facing.x).toBeCloseTo(0, 3);
+  expect(res.facing.y).toBeCloseTo(-1, 3);
+  expect(res.upShots).toBeGreaterThan(0);
+  expect(res.knob).toBe(true);
+  await ctx.close();
+});
+
 test("exit to menu asks for confirmation and only leaves on yes", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByRole("button", { name: /Mula/ })).toBeVisible({ timeout: 30_000 });

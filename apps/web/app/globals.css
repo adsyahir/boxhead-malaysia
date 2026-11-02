@@ -188,6 +188,7 @@ a { color: inherit; }
 .g3d-stick, .g3d-knob, .g3d-tbtn { position: absolute; transform: translate(-50%, -50%); border-radius: 50%; pointer-events: none; }
 .g3d-stick { border: 3px solid rgba(255, 255, 255, 0.35); background: rgba(255, 255, 255, 0.12); }
 .g3d-knob { width: 48px; height: 48px; background: rgba(255, 255, 255, 0.4); }
+.g3d-knob.aim { width: 40px; height: 40px; background: rgba(255, 210, 74, 0.75); box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.4); }
 .g3d-tbtn { display: grid; place-items: center; color: #fff; font-weight: 700; font-size: 15px; text-shadow: 0 1px 2px #000; }
 .g3d-tbtn.fire { background: rgba(208, 48, 48, 0.4); }
 .g3d-tbtn.swap { background: rgba(48, 112, 208, 0.4); font-size: 13px; }

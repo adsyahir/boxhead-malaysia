@@ -2,7 +2,7 @@
 
 import { useT } from "../../settings/react";
 import { useEffect, useRef, useState } from "react";
-import { STICK_RADIUS, applyStick, resetTouchState, touchState } from "../../game/input/touch-state";
+import { STICK_RADIUS, applyAim, applyStick, resetTouchState, touchState } from "../../game/input/touch-state";
 
 interface Btn {
   x: number;
@@ -10,7 +10,10 @@ interface Btn {
   r: number;
 }
 
-/** Virtual joystick (left half) plus Tembak and Tukar buttons (bottom-right), as DOM pointer events. */
+/**
+ * Twin-stick touch controls as DOM pointer events: a move stick (left half), a Fire stick (bottom-right: press to
+ * shoot ahead, drag to aim and shoot that way) and a Tukar button.
+ */
 export default function TouchControls() {
   const t = useT();
   const layer = useRef<HTMLDivElement>(null);
@@ -20,6 +23,7 @@ export default function TouchControls() {
   const [size, setSize] = useState({ w: 0, h: 0 });
   const [stick, setStick] = useState<{ ox: number; oy: number; kx: number; ky: number } | null>(null);
   const [pressed, setPressed] = useState({ fire: false, swap: false });
+  const [aimKnob, setAimKnob] = useState({ dx: 0, dy: 0 });
 
   useEffect(() => {
     const el = layer.current;
@@ -35,7 +39,7 @@ export default function TouchControls() {
 
   const fireBtn: Btn = { x: size.w - 90, y: size.h - 100, r: 56 };
   const swapBtn: Btn = { x: size.w - 200, y: size.h - 60, r: 40 };
-  const inside = (x: number, y: number, b: Btn) => Math.hypot(x - b.x, y - b.y) <= b.r + 12;
+  const inside = (x: number, y: number, b: Btn, slack = 12) => Math.hypot(x - b.x, y - b.y) <= b.r + slack;
 
   const local = (e: React.PointerEvent) => {
     const r = layer.current!.getBoundingClientRect();
@@ -45,9 +49,10 @@ export default function TouchControls() {
   const onDown = (e: React.PointerEvent<HTMLDivElement>) => {
     const { x, y } = local(e);
     const s = ids.current;
-    if (inside(x, y, fireBtn) && s.fire < 0) {
+    if (inside(x, y, fireBtn, 24) && s.fire < 0) {
       s.fire = e.pointerId;
       touchState.fire = true;
+      setAimKnob(applyAim(x - fireBtn.x, y - fireBtn.y));
       setPressed((p) => ({ ...p, fire: true }));
     } else if (inside(x, y, swapBtn) && s.swap < 0) {
       s.swap = e.pointerId;
@@ -68,6 +73,11 @@ export default function TouchControls() {
   };
 
   const onMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (e.pointerId === ids.current.fire) {
+      const { x, y } = local(e);
+      setAimKnob(applyAim(x - fireBtn.x, y - fireBtn.y));
+      return;
+    }
     if (e.pointerId !== ids.current.stick) return;
     const { x, y } = local(e);
     const o = origin.current;
@@ -86,6 +96,9 @@ export default function TouchControls() {
     if (e.pointerId === s.fire) {
       s.fire = -1;
       touchState.fire = false;
+      touchState.aimX = 0;
+      touchState.aimY = 0;
+      setAimKnob({ dx: 0, dy: 0 });
       setPressed((p) => ({ ...p, fire: false }));
     }
     if (e.pointerId === s.swap) {
@@ -115,6 +128,7 @@ export default function TouchControls() {
           <div className={`g3d-tbtn fire${pressed.fire ? " on" : ""}`} style={{ left: fireBtn.x, top: fireBtn.y, width: fireBtn.r * 2, height: fireBtn.r * 2 }}>
             {t("fire")}
           </div>
+          {pressed.fire && <div className="g3d-knob aim" style={{ left: fireBtn.x + aimKnob.dx, top: fireBtn.y + aimKnob.dy }} />}
           <div className={`g3d-tbtn swap${pressed.swap ? " on" : ""}`} style={{ left: swapBtn.x, top: swapBtn.y, width: swapBtn.r * 2, height: swapBtn.r * 2 }}>
             {t("swap")}
           </div>
