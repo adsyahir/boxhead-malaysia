@@ -7,7 +7,7 @@
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r test",
     "build:web": "corepack pnpm --filter @kampung/web build",
-    "ship": "corepack pnpm --filter @kampung/web build && corepack pnpm --filter @kampung/server deploy",
+    "ship": "corepack pnpm --filter @kampung/web build && corepack pnpm --filter @kampung/server run deploy",
     "dev:online": "corepack pnpm --filter @kampung/server dev"
   }
 }
