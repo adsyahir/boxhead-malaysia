@@ -71,7 +71,9 @@ a { color: inherit; }
 
 .g3d-screen {
   position: absolute; inset: 0; z-index: 5; display: flex; flex-direction: column; align-items: center; justify-content: center;
-  gap: 18px; padding: 24px 16px; text-align: center;
+  gap: 18px; text-align: center;
+  padding: max(24px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(24px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
+  overflow-y: auto; justify-content: safe center;
   background: radial-gradient(ellipse at center, rgba(5, 6, 14, 0.15) 0%, rgba(5, 6, 14, 0.55) 60%, rgba(5, 6, 14, 0.9) 100%);
 }
 .g3d-title {
@@ -197,6 +199,21 @@ a { color: inherit; }
   .g3d-btn { padding: 8px 18px; font-size: 1rem; }
   .g3d-buttons { gap: 8px; }
   .g3d-stats { font-size: 1rem; gap: 2px 18px; }
+}
+
+/* Phone in landscape: title and info on the left, buttons on the right, so the whole menu fits without scrolling. */
+@media (max-height: 520px) and (orientation: landscape) {
+  .g3d-menu {
+    display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-template-rows: 1fr auto auto auto 1fr;
+    column-gap: clamp(16px, 4vw, 48px); row-gap: 8px; align-content: center; align-items: center;
+  }
+  .g3d-menu .g3d-title { grid-column: 1; grid-row: 2; font-size: clamp(1.5rem, 9vh, 2.4rem); }
+  .g3d-menu .g3d-sub { grid-column: 1; grid-row: 3; font-size: 0.85rem; }
+  .g3d-menu .g3d-soundhint { grid-column: 1; grid-row: 4; }
+  .g3d-menu .g3d-menu-foot { grid-column: 1; grid-row: 4; justify-content: center; margin-top: 0; }
+  .g3d-menu .g3d-soundhint + .g3d-menu-foot { grid-row: 5; align-self: start; }
+  .g3d-menu .g3d-buttons { grid-column: 2; grid-row: 1 / 6; align-self: center; min-width: 0; gap: 8px; margin-right: 56px; }
+  .g3d-menu .g3d-btn { padding: 10px 16px; min-height: 44px; }
 }
 
 /* ---- main menu flow, settings, help, credits ---- */
@@ -393,3 +410,24 @@ h1, h2, h3, .btn, .g3d-btn, .g3d-chip, .g3d-keycap, .g3d-title, .g3d-dead, .g3d-
 .g3d-submit { display: flex; flex-direction: column; align-items: center; gap: 8px; width: min(520px, 100%); }
 .g3d-submit h3 { margin: 0; color: var(--accent); font-size: 1rem; }
 .g3d-submitted { margin: 0; font-weight: 700; color: #6fd08a; }
+
+/* Phone in landscape: pick screens use a grid (heroes 4x2, maps in one row) instead of one long column. */
+@media (max-height: 520px) and (orientation: landscape) {
+  .g3d-screen { gap: 10px; }
+  .g3d-h2 { font-size: 1.4rem; }
+  .g3d-cards { flex-direction: row; flex-wrap: wrap; align-items: stretch; }
+  .g3d-heroes { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; width: min(100%, 720px); }
+  .g3d-char { width: auto; min-width: 0; flex-direction: row; gap: 8px; padding: 6px 10px; text-align: left; position: relative; }
+  .g3d-char .g3d-card-num { width: 24px; height: 24px; font-size: 0.8rem; flex: none; }
+  .g3d-char .g3d-figure { transform: scale(0.6); margin: -13px -9px; flex: none; }
+  .g3d-char .g3d-card-name { font-size: 0.95rem; line-height: 1.15; }
+  .g3d-char .g3d-card-blurb { display: none; }
+  .g3d-maps .g3d-cards { flex-wrap: nowrap; gap: 10px; width: min(100%, 760px); }
+  .g3d-maps .g3d-card { flex: 1 1 0; width: auto; min-width: 0; flex-direction: column; text-align: center; padding: 10px; }
+  .g3d-help { font-size: 0.72rem; }
+}
+
+/* The page draws under the notch (viewport-fit=cover), so HUD, touch controls and corner buttons stay inside the safe area. */
+.g3d-hud, .g3d-touch { inset: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px); }
+.g3d-mute-float { top: max(10px, env(safe-area-inset-top)); right: max(10px, env(safe-area-inset-right)); }
+.g3d-back { top: max(16px, env(safe-area-inset-top)); left: max(16px, env(safe-area-inset-left)); }

@@ -78,6 +78,29 @@ test("main menu flow: Start, mode, hero, map reach the game", async ({ page }) =
   await expect(page.locator("canvas")).toHaveAttribute("data-scene", "Game", { timeout: 20_000 });
 });
 
+test("phone landscape: menu, heroes and maps fit on one screen; icon and manifest load", async ({ page }) => {
+  await page.setViewportSize({ width: 844, height: 390 });
+  const inView = async (name: RegExp) => {
+    const b = await page.getByRole("button", { name }).boundingBox();
+    expect(b, String(name)).not.toBeNull();
+    expect(b!.y).toBeGreaterThanOrEqual(0);
+    expect(b!.y + b!.height).toBeLessThanOrEqual(390);
+  };
+  await page.goto("/");
+  await expect(page.getByRole("button", { name: /Mula/ })).toBeVisible({ timeout: 30_000 });
+  for (const n of [/Mula/, /Cara Bermain/, /Tetapan/, /Papan Markah/, /Kredit/]) await inView(n);
+  const title = await page.locator(".g3d-title").boundingBox();
+  expect(title!.y).toBeGreaterThanOrEqual(0);
+  await page.getByRole("button", { name: /Mula/ }).click();
+  await page.getByRole("button", { name: /1 Pemain/ }).click();
+  for (const n of [/Abu/, /Siti/, /Ah Meng/, /Mei Ling/, /Muthu/, /Kavitha/, /Hamid/, /Kiah/]) await inView(n);
+  await page.getByRole("button", { name: /Abu/ }).click();
+  for (const n of [/Kampung Pisang/, /Kebun Getah/, /Tanah Perkuburan/]) await inView(n);
+  for (const path of ["/manifest.webmanifest", "/apple-touch-icon.png", "/icon-192.png", "/icon-512.png", "/icon.svg"]) {
+    expect((await page.request.get(path)).status(), path).toBe(200);
+  }
+});
+
 test("exit to menu asks for confirmation and only leaves on yes", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByRole("button", { name: /Mula/ })).toBeVisible({ timeout: 30_000 });

@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { UPGRADE_LIST, WEAPONS, WEAPON_IDS } from "@kampung/game-core";
 import { CHARACTERS, HEROES, characterName, hex, type Character } from "../../game/characters";
 import type { RunSummary } from "../../game/constants";
@@ -212,6 +213,35 @@ export function MapSelect({
   );
 }
 
+function FullscreenRow() {
+  const t = useT();
+  const [on, setOn] = useState(false);
+  const [canFs, setCanFs] = useState(false);
+  const [installed, setInstalled] = useState(true);
+  useEffect(() => {
+    setCanFs(document.fullscreenEnabled === true);
+    setInstalled(window.matchMedia("(display-mode: fullscreen), (display-mode: standalone)").matches || (navigator as { standalone?: boolean }).standalone === true);
+    const sync = () => setOn(document.fullscreenElement != null);
+    document.addEventListener("fullscreenchange", sync);
+    return () => document.removeEventListener("fullscreenchange", sync);
+  }, []);
+  if (installed) return null;
+  if (!canFs) return <p className="g3d-note">{t("installNote")}</p>;
+  return (
+    <div className="g3d-row">
+      <span>{t("fullscreen")}</span>
+      <button
+        type="button"
+        className={`g3d-chip${on ? " on" : ""}`}
+        aria-pressed={on}
+        onClick={() => (on ? document.exitFullscreen() : document.documentElement.requestFullscreen({ navigationUI: "hide" })).catch(() => {})}
+      >
+        {on ? t("fullscreenOn") : t("fullscreenOff")}
+      </button>
+    </div>
+  );
+}
+
 export function SettingsScreen({ onBack, inGame = false }: { onBack(): void; inGame?: boolean }) {
   const t = useT();
   const s = useSettings();
@@ -242,6 +272,7 @@ export function SettingsScreen({ onBack, inGame = false }: { onBack(): void; inG
             {s.muted ? t("soundOff") : t("soundOn")}
           </button>
         </div>
+        <FullscreenRow />
         <div className="g3d-row">
           <label htmlFor="set-quality">{t("quality")}</label>
           <select id="set-quality" value={s.quality} onChange={(e) => updateSettings({ quality: e.target.value as Quality })}>
