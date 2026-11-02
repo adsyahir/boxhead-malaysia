@@ -6,8 +6,8 @@
     "lint": "pnpm -r lint",
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r test",
-    "build:web": "pnpm --filter @kampung/web build",
-    "deploy": "pnpm --filter @kampung/web build && pnpm --filter @kampung/server deploy",
-    "dev:online": "pnpm --filter @kampung/server dev"
+    "build:web": "corepack pnpm --filter @kampung/web build",
+    "ship": "corepack pnpm --filter @kampung/web build && corepack pnpm --filter @kampung/server deploy",
+    "dev:online": "corepack pnpm --filter @kampung/server dev"
   }
 }

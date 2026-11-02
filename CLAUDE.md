@@ -17,7 +17,7 @@ corepack pnpm --filter @kampung/web dev              # http://localhost:3000/pla
 cd apps/web && corepack pnpm exec next build
 cd apps/web && CI= corepack pnpm exec playwright test   # 19 tests; starts next dev :3100 + the Worker :8787 itself; uses installed Chrome
 corepack pnpm dev:online                             # online server on :8787 (run build:web once first)
-corepack pnpm deploy                                 # build site + deploy the Worker (needs wrangler login)
+corepack pnpm ship                                   # build site + deploy the Worker (needs wrangler login)
 corepack pnpm --filter @kampung/web maps             # regenerate tiles.png + 3 Tiled JSON maps
 ```
 

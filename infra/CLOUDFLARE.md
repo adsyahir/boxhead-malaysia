@@ -18,14 +18,14 @@ code in `apps/server`) serves the static website and also runs the online rooms.
    ```
 3. First deploy (builds the site, then publishes the Worker with its Durable Objects):
    ```bash
-   corepack pnpm deploy
+   corepack pnpm ship
    ```
    It prints your URL, like `https://hantu-kampung-pisang.<your-subdomain>.workers.dev`. Open it and play. Open it on a
    second device, create a room on one and join from the other with the 4-letter code.
 
 ## The leaderboard database (D1)
 
-`apps/server/wrangler.jsonc` declares a D1 database called `hantu-kampung-pisang` bound as `DB`. Locally wrangler creates it for you. On your first `corepack pnpm deploy`, recent wrangler versions create the database on your account automatically; if yours asks for a `database_id`, run `cd apps/server && npx wrangler d1 create hantu-kampung-pisang`, paste the id into `wrangler.jsonc`, and deploy again. The table is created by the Worker the first time it is used, so there is no migration step.
+`apps/server/wrangler.jsonc` declares a D1 database called `hantu-kampung-pisang` bound as `DB`. Locally wrangler creates it for you. On your first `corepack pnpm ship`, recent wrangler versions create the database on your account automatically; if yours asks for a `database_id`, run `cd apps/server && npx wrangler d1 create hantu-kampung-pisang`, paste the id into `wrangler.jsonc`, and deploy again. The table is created by the Worker the first time it is used, so there is no migration step.
 
 - `POST /api/scores` takes a finished 1P or 2P run (nickname, score, wave, kills, map, mode, durationMs). It is checked against the same limits as the game (`validateRun`), the level must match the kills, and each sender may store 5 scores a minute.
 - Online scores are never accepted from a browser. The room server saves the team score itself when a game ends, which is why those cannot be faked.
