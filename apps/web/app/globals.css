@@ -80,6 +80,7 @@ a { color: inherit; }
   margin: 0; color: var(--accent); font-size: clamp(2rem, 7vw, 3.8rem); line-height: 1.02; letter-spacing: 0.02em;
   text-shadow: 0 5px 0 #3a1a00, 0 0 28px rgba(255, 160, 40, 0.35);
 }
+.g3d-title-kicker { display: block; margin-bottom: 0.12em; font-size: 0.42em; letter-spacing: 0.32em; color: #f2f2ea; text-shadow: 0 3px 0 #3a1a00; }
 .g3d-sub { margin: 0; color: #b8c8e0; font-size: 0.95rem; text-shadow: 0 2px 4px #000; }
 .g3d-buttons { display: flex; flex-direction: column; gap: 10px; min-width: min(340px, 100%); }
 .g3d-btn {

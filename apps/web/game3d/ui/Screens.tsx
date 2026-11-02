@@ -48,7 +48,8 @@ export function Menu(props: {
   ];
   return (
     <div className="g3d-screen g3d-menu">
-      <h1 className="g3d-title">
+      <h1 className="g3d-title" aria-label="Boxhead: Hantu Kampung Pisang">
+        <span className="g3d-title-kicker">BOXHEAD</span>
         HANTU
         <br />
         KAMPUNG PISANG
