@@ -503,35 +503,58 @@ test("online lobby: every control works (copy, map, hero, leave)", async ({ brow
 
 const API = "http://localhost:8787";
 const randomIp = () => `10.${Math.floor(Math.random() * 250)}.${Math.floor(Math.random() * 250)}.${Math.floor(Math.random() * 250)}`;
-const run = { nickname: "Api Tester", score: 5000, wave: 3, kills: 30, map: "kampung-pisang", mode: "1p", durationMs: 90_000 };
+// A wave-1 run the game can produce: 8 pocong, 10 s (the shortest a wave can take), 3,000 points.
+const run = { nickname: "Api Tester", score: 3000, wave: 1, kills: 8, map: "kampung-pisang", mode: "1p", durationMs: 10_000 };
+/** Headers the game page sends; the server refuses score posts without its Origin. */
+const fromGame = (ip: string) => ({ origin: "http://localhost:3100", "cf-connecting-ip": ip });
+const NO_TICKET = "00000000-0000-4000-8000-000000000000";
 
-test("leaderboard API: stores a valid score, refuses cheats, rate-limits, and lists the best first", async ({ request }) => {
+test("leaderboard API: tickets, real play time, cheats refused, rate limit, best first", async ({ request }) => {
   const ip = randomIp();
-  const post = (body: unknown, h: Record<string, string> = { "cf-connecting-ip": ip }) => request.post(`${API}/api/scores`, { data: body, headers: h });
+  const ticket = async (from = ip) => {
+    const r = await request.post(`${API}/api/runs`, { data: { map: "kampung-pisang" }, headers: fromGame(from) });
+    expect(r.status()).toBe(201);
+    return ((await r.json()) as { ticket: string }).ticket;
+  };
+  const post = (body: unknown, h: Record<string, string> = fromGame(ip)) => request.post(`${API}/api/scores`, { data: body, headers: h });
 
-  const ok = await post({ ...run, nickname: `Api${Date.now() % 1_000_000}`, score: 7770 });
+  // Not from the game page: no Origin (curl, scripts), another site, or a cross-site browser request.
+  expect((await post({ ...run, ticket: NO_TICKET }, { "cf-connecting-ip": ip })).status()).toBe(403);
+  expect((await post({ ...run, ticket: NO_TICKET }, { ...fromGame(ip), origin: "https://evil.example" })).status()).toBe(403);
+  expect((await post({ ...run, ticket: NO_TICKET }, { ...fromGame(ip), "sec-fetch-site": "cross-site" })).status()).toBe(403);
+  expect((await request.post(`${API}/api/runs`, { data: { map: "kampung-pisang" } })).status()).toBe(403);
+
+  // Edited numbers fail the rules before any ticket is looked at.
+  for (const bad of [{ score: 99_999_999 }, { durationMs: 1000 }, { mode: "online" }, { nickname: "ab" }, { nickname: "kote" }, { score: 3003 }, { score: 900_000 }])
+    expect((await post({ ...run, ...bad, ticket: NO_TICKET })).status(), JSON.stringify(bad)).toBe(400);
+  expect((await post({ ...run, ticket: NO_TICKET })).status()).toBe(400); // made-up ticket
+
+  // A real ticket, sent at once: the run cannot have lasted 10 s yet.
+  const early = await ticket();
+  const tooSoon = await post({ ...run, ticket: early });
+  expect(tooSoon.status()).toBe(400);
+  expect(((await tooSoon.json()) as { reason: string }).reason).toBe("Sent sooner than the run could have lasted");
+
+  // Tickets for the next submits, then wait the run's length as a player would.
+  const tickets = await Promise.all([ticket(), ticket(), ticket(), ticket(), ticket(), ticket()]);
+  const other = await ticket(randomIp());
+  await new Promise((r) => setTimeout(r, 8_000));
+
+  const ok = await post({ ...run, nickname: `Api${Date.now() % 1_000_000}`, score: 5550, ticket: tickets[0] });
   expect(ok.status()).toBe(201);
-  expect(((await ok.json()) as { rank: number }).rank).toBeGreaterThanOrEqual(1);
-
-  expect((await post({ ...run, score: 99_999_999 })).status()).toBe(400); // more than any run could earn
-  expect((await post({ ...run, durationMs: 1000 })).status()).toBe(400); // wave 3 in one second
-  expect((await post({ ...run, mode: "online" })).status()).toBe(400); // online scores come from the room server only
-  expect((await post({ ...run, nickname: "ab" })).status()).toBe(400);
-  expect((await post({ ...run, nickname: "kote" })).status()).toBe(400); // vulgar name
-  expect((await post({ ...run, score: 5003 })).status()).toBe(400); // not a total the game can make
-  expect((await post({ ...run, score: 900_000 })).status()).toBe(400); // more than 30 kills can earn
+  expect((await post({ ...run, score: 5540, ticket: tickets[0] })).status()).toBe(400); // a ticket works once
 
   const list = await request.get(`${API}/api/scores?map=kampung-pisang&mode=1p&limit=100`);
   expect(list.status()).toBe(200);
   expect(list.headers()["cache-control"]).toContain("max-age=30");
   const { scores } = (await list.json()) as { scores: { rank: number; score: number }[] };
-  expect(scores.some((s) => s.score === 7770)).toBe(true);
+  expect(scores.some((s) => s.score === 5550)).toBe(true);
   for (let i = 1; i < scores.length; i++) expect(scores[i - 1]!.score).toBeGreaterThanOrEqual(scores[i]!.score);
 
   // the same sender gets 5 stored scores a minute (1 already used above)
-  for (let i = 0; i < 4; i++) expect((await post({ ...run, score: 3000 + i * 10 })).status()).toBe(201);
-  expect((await post({ ...run, score: 3500 })).status()).toBe(429);
-  expect((await post({ ...run, score: 3500 }, { "cf-connecting-ip": randomIp() })).status()).toBe(201); // someone else is fine
+  for (let i = 1; i <= 4; i++) expect((await post({ ...run, score: 3000 + i * 10, ticket: tickets[i] })).status()).toBe(201);
+  expect((await post({ ...run, score: 3500, ticket: tickets[5] })).status()).toBe(429);
+  expect((await request.post(`${API}/api/scores`, { data: { ...run, score: 3500, ticket: other }, headers: fromGame(randomIp()) })).status()).toBe(201); // someone else is fine
 });
 
 test("game over: submit a score with a nickname, then find it on the leaderboard", async ({ page }) => {
@@ -543,10 +566,12 @@ test("game over: submit a score with a nickname, then find it on the leaderboard
   await page.getByRole("button", { name: /Kampung Pisang/ }).click();
   await expect(page.locator("canvas")).toHaveAttribute("data-scene", "Game", { timeout: 20_000 });
 
-  // end the run now with a result the game can produce: 40 s played, 3 pocong in a row (100 x combo 1+2+3)
+  // end the run with a result the game can produce: 10 s played, 3 pocong in a row (100 x combo 1+2+3).
+  // The server only takes it once 10 s have really passed since the run's ticket, so play that long first.
+  await page.waitForTimeout(8_000);
   await page.evaluate(() => {
     const w = (window as unknown as { __kppWorld: () => { time: number; kills: number; score: number; players: { hp: number; alive: boolean }[] } }).__kppWorld();
-    w.time = 40;
+    w.time = 10;
     w.kills = 3;
     w.score = 600;
     w.players[0]!.hp = 0;
@@ -574,9 +599,10 @@ test("game over: a failed submit says so and can be retried with the run kept", 
   await page.getByRole("button", { name: /Abu/ }).click();
   await page.getByRole("button", { name: /Kampung Pisang/ }).click();
   await expect(page.locator("canvas")).toHaveAttribute("data-scene", "Game", { timeout: 20_000 });
+  await page.waitForTimeout(8_000);
   await page.evaluate(() => {
     const w = (window as unknown as { __kppWorld: () => { time: number; kills: number; score: number; players: { hp: number; alive: boolean }[] } }).__kppWorld();
-    w.time = 40;
+    w.time = 10;
     w.kills = 3;
     w.score = 300;
     w.players[0]!.hp = 0;

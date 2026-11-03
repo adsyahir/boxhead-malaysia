@@ -28,6 +28,24 @@ async function timed(path: string, init?: RequestInit): Promise<Response> {
   }
 }
 
+/**
+ * Ask the server for a run ticket when a local run starts. The score must bring it back, and the server only takes
+ * it once at least the run's play time has passed. Retries a few times; null if the server cannot be reached.
+ */
+export async function requestTicket(map: string): Promise<string | null> {
+  for (let attempt = 0; attempt < 4; attempt++) {
+    try {
+      const res = await timed("/api/runs", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ map }) });
+      if (res.status === 201) return ((await res.json()) as { ticket: string }).ticket;
+      if (res.status === 400) return null;
+    } catch {
+      /* try again */
+    }
+    await new Promise((r) => setTimeout(r, 2000 * (attempt + 1)));
+  }
+  return null;
+}
+
 /** Send a finished 1P or 2P run. The server re-checks it; online runs are saved by the room server, never here. */
 export async function submitScore(run: {
   nickname: string;
@@ -38,6 +56,7 @@ export async function submitScore(run: {
   map: string;
   mode: "1p" | "2p";
   durationMs: number;
+  ticket: string;
 }): Promise<SubmitOutcome> {
   try {
     const res = await timed("/api/scores", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(run) });

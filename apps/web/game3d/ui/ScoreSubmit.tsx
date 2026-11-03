@@ -34,7 +34,12 @@ export default function ScoreSubmit({ run }: { run: RunSummary }) {
       /* not remembered */
     }
     setStatus({ kind: "sending" });
-    const r = await submitScore({ nickname: name.trim(), score: run.score, wave: run.wave, kills: run.kills, level: run.level, map: run.map, mode, durationMs: run.durationMs });
+    const ticket = run.ticket ? await run.ticket : null;
+    if (!ticket) {
+      setStatus({ kind: "error", message: "submitFail" });
+      return;
+    }
+    const r = await submitScore({ nickname: name.trim(), score: run.score, wave: run.wave, kills: run.kills, level: run.level, map: run.map, mode, durationMs: run.durationMs, ticket });
     if (r.ok) setStatus({ kind: "done", rank: r.rank });
     else setStatus({ kind: "error", message: r.reason === "rate_limited" ? "submitRate" : r.reason === "invalid" ? "submitInvalid" : "submitFail" });
   };

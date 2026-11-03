@@ -20,6 +20,7 @@ import { Lobby, OnlineMenu, nameIsValid } from "./ui/OnlineScreens";
 import { CharacterSelect, Credits, GameOver, HowToPlay, MapSelect, Menu, ModeSelect, SettingsScreen, UpgradeList } from "./ui/Screens";
 import TouchControls from "./ui/TouchControls";
 import PerfOverlay from "./ui/PerfOverlay";
+import { requestTicket } from "./net/scores";
 import type { PerfStats } from "./engine/perf";
 
 const TOAST_MS = 1600;
@@ -86,6 +87,8 @@ export default function Game3D() {
   firstRef.current = firstPick;
   const [hud, setHud] = useState<HudState | null>(null);
   const [perf, setPerf] = useState<PerfStats | null>(null);
+  /** Ticket for the local run in progress (see net/scores.ts requestTicket). */
+  const ticketRef = useRef<Promise<string | null> | null>(null);
   const hudRef = useRef<HudState | null>(null);
   hudRef.current = hud;
   const [confirmExit, setConfirmExit] = useState(false);
@@ -161,6 +164,7 @@ export default function Game3D() {
       }
       void e.startGame(key, n, chars).then(() => {
         if (screenRef.current === "Game") e.setSceneName("Game");
+        ticketRef.current = requestTicket(key);
       });
     },
     [go],
@@ -353,7 +357,7 @@ export default function Game3D() {
         onEnding: () => setEnding(true),
         onPerf: (s) => setPerf(s),
         onGameOver: (r) => {
-          setRun(r);
+          setRun(r.mode === "online" ? r : { ...r, ticket: ticketRef.current ?? Promise.resolve(null) });
           setEnding(false);
           go("GameOver");
         },
@@ -372,6 +376,7 @@ export default function Game3D() {
       } else if (p) {
         void instance.startGame(p.key, p.players, p.characters).then(() => {
           if (screenRef.current === "Game") instance?.setSceneName("Game");
+          ticketRef.current = requestTicket(p.key);
         });
       } else void instance.showBackdrop(MAPS[0]!.key);
     });

@@ -13,4 +13,6 @@ export interface RunSummary {
   durationMs: number;
   map: string;
   mode: "1p" | "2p" | "online";
+  /** Run ticket asked for when a local run started (3D client); the score submit sends it back. */
+  ticket?: Promise<string | null>;
 }
