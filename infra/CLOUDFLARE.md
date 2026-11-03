@@ -31,6 +31,11 @@ code in `apps/server`) serves the static website and also runs the online rooms.
 - Online scores are never accepted from a browser. The room server saves the team score itself when a game ends, which is why those cannot be faked.
 - `GET /api/scores?map=&mode=&limit=50` returns the best first and is cached for 30 seconds.
 - See and clear data: `cd apps/server && npx wrangler d1 execute DB --remote --command "SELECT * FROM scores ORDER BY score DESC LIMIT 20"`.
+- Every submit attempt (stored, rejected as invalid, or rate limited) is logged privately in `score_submissions` with the
+  IP, Cloudflare's location (country, region, city), network (ASN and name), data centre and browser. It is never
+  returned by the public API, and rows older than 90 days are deleted. Recent rejected attempts:
+  `cd apps/server && npx wrangler d1 execute DB --remote --command "SELECT datetime(at/1000,'unixepoch') AS time, outcome, reason, nickname, score, ip, country, city, as_org FROM score_submissions WHERE outcome != 'stored' ORDER BY at DESC LIMIT 30"`.
+  Remove a bad score: `... --command "DELETE FROM scores WHERE nickname = 'X'"`.
 
 ## Custom domain
 
