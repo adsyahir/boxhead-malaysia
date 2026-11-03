@@ -57,11 +57,28 @@ export interface ScoreStore {
   top(map: MapId | null, mode: ScoreMode | null, limit: number): Promise<ScoreRow[]>;
   recentFrom(ipHash: string, sinceMs: number): Promise<number>;
   logSubmission(entry: SubmissionLog): Promise<void>;
+  /** Store a new run ticket. */
+  addTicket(id: string, map: MapId, ipHash: string, now: number): Promise<void>;
+  /** Tickets this sender asked for since `sinceMs`. */
+  recentTickets(ipHash: string, sinceMs: number): Promise<number>;
+  /** Mark a ticket used and return when it was issued and for which map; null if unknown or already used. Must be atomic. */
+  useTicket(id: string, now: number): Promise<{ issuedAt: number; map: MapId } | null>;
 }
 
 export const SUBMIT_LIMIT = 5;
 export const SUBMIT_WINDOW_MS = 60_000;
 export const TEAM_NAME_MAX = 40;
+
+/**
+ * Run tickets: the game asks for one when a run starts, and the score must bring it back. A ticket works once, for
+ * one map, and only after at least the run's claimed play time has really passed since it was issued.
+ */
+export const TICKET_LIMIT = 30;
+export const TICKET_WINDOW_MS = 60_000;
+/** Allowance for the ticket request arriving a moment after the run started. */
+export const TICKET_SLACK_MS = 3_000;
+export const TICKET_MAX_AGE_MS = 12 * 3600 * 1000;
+const TICKET_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
 const int = z.number().int();
 
@@ -75,9 +92,13 @@ export const SubmissionSchema = z.object({
   map: z.enum(MAP_IDS),
   mode: z.enum(["1p", "2p"]),
   durationMs: int.min(0).max(24 * 3600 * 1000),
+  /** The run ticket from POST /api/runs. */
+  ticket: z.string().regex(TICKET_RE),
 });
 
-export type CheckResult = { ok: true; data: NewScore } | { ok: false; reason: string };
+export const TicketRequestSchema = z.object({ map: z.enum(MAP_IDS) });
+
+export type CheckResult = { ok: true; data: NewScore; ticket: string } | { ok: false; reason: string };
 
 /**
  * Everything a score must pass before it is stored: shape, nickname rules, the anti-cheat limits that live in
@@ -104,6 +125,7 @@ export function checkSubmission(body: unknown): CheckResult {
   return {
     ok: true,
     data: { nickname, score: b.score, wave, kills: b.kills, level, map: b.map, mode: b.mode, durationMs: b.durationMs, source: "client" },
+    ticket: b.ticket,
   };
 }
 
@@ -113,8 +135,16 @@ export type SubmitResult = { ok: true; rank: number } | { ok: false; status: 400
  * Check, rate-limit, store and rank a browser-submitted score. `ipHash` identifies the sender for rate limiting;
  * `trace` (when given) records the attempt, whatever the outcome, in the private submission log.
  */
-export async function submitScore(store: ScoreStore, body: unknown, ipHash: string, now: number, trace?: SubmitTrace): Promise<SubmitResult> {
-  const result = await decide(store, body, ipHash, now);
+export async function submitScore(
+  store: ScoreStore,
+  body: unknown,
+  ipHash: string,
+  now: number,
+  trace?: SubmitTrace,
+  /** Set when the request was already refused (e.g. not from a browser): only log it. */
+  refused?: string,
+): Promise<SubmitResult> {
+  const result: SubmitResult = refused ? { ok: false, status: 400, reason: refused } : await decide(store, body, ipHash, now);
   if (trace) {
     const b = (typeof body === "object" && body !== null ? body : {}) as Record<string, unknown>;
     const entry: SubmissionLog = {
@@ -138,6 +168,13 @@ async function decide(store: ScoreStore, body: unknown, ipHash: string, now: num
   const checked = checkSubmission(body);
   if (!checked.ok) return { ok: false, status: 400, reason: checked.reason };
   if ((await store.recentFrom(ipHash, now - SUBMIT_WINDOW_MS)) >= SUBMIT_LIMIT) return { ok: false, status: 429, reason: "Too many submissions" };
+  // The ticket is used up even when the checks below fail: one try per run.
+  const t = await store.useTicket(checked.ticket, now);
+  if (!t) return { ok: false, status: 400, reason: "Unknown or used ticket" };
+  if (t.map !== checked.data.map) return { ok: false, status: 400, reason: "Ticket is for another map" };
+  const elapsed = now - t.issuedAt;
+  if (elapsed > TICKET_MAX_AGE_MS) return { ok: false, status: 400, reason: "Ticket expired" };
+  if (elapsed + TICKET_SLACK_MS < checked.data.durationMs) return { ok: false, status: 400, reason: "Sent sooner than the run could have lasted" };
   await store.insert(checked.data, ipHash, now);
   return { ok: true, rank: (await store.countHigher(checked.data.map, checked.data.mode, checked.data.score)) + 1 };
 }
@@ -171,3 +208,15 @@ export const QuerySchema = z.object({
   mode: z.enum(SCORE_MODES).optional(),
   limit: z.coerce.number().int().min(1).max(100).default(50),
 });
+
+export type TicketResult = { ok: true; ticket: string } | { ok: false; status: 400 | 429; reason: string };
+
+/** Hand out a run ticket for a starting 1P run. `newId` makes the random id (crypto.randomUUID in the Worker). */
+export async function issueTicket(store: ScoreStore, body: unknown, ipHash: string, now: number, newId: () => string): Promise<TicketResult> {
+  const parsed = TicketRequestSchema.safeParse(body);
+  if (!parsed.success) return { ok: false, status: 400, reason: "Malformed request" };
+  if ((await store.recentTickets(ipHash, now - TICKET_WINDOW_MS)) >= TICKET_LIMIT) return { ok: false, status: 429, reason: "Too many runs" };
+  const id = newId();
+  await store.addTicket(id, parsed.data.map, ipHash, now);
+  return { ok: true, ticket: id };
+}

@@ -3,7 +3,7 @@ import { D1ScoreStore } from "./d1-store";
 import { LobbyLogic } from "./lobby-logic";
 import { loadMap } from "./maps";
 import { RoomLogic, type Conn, type RoomSummary } from "./room-logic";
-import { QuerySchema, saveOnlineScore, submitScore, type SubmitTrace } from "./scores";
+import { QuerySchema, issueTicket, saveOnlineScore, submitScore, type SubmitTrace } from "./scores";
 
 interface Env {
   ROOM: DurableObjectNamespace;
@@ -29,6 +29,20 @@ function allowedOrigin(req: Request, url: URL): string | null {
   return null;
 }
 
+/**
+ * Score and ticket posts must look like they come from the game page in a browser: an Origin of this site (or
+ * localhost in development), a JSON body, and, when the browser sends Sec-Fetch-Site, a same-site request. This stops
+ * plain scripts and other sites; it cannot stop someone who copies the headers, which is what the run ticket and the
+ * score checks are for.
+ */
+function browserPostProblem(req: Request, origin: string): string | null {
+  if (!origin) return "Missing Origin";
+  if (!(req.headers.get("content-type") ?? "").toLowerCase().startsWith("application/json")) return "Not JSON";
+  const site = req.headers.get("sec-fetch-site");
+  if (site !== null && site !== "same-origin" && site !== "same-site") return "Cross-site request";
+  return null;
+}
+
 function cors(origin: string): HeadersInit {
   return origin ? { "access-control-allow-origin": origin, "access-control-allow-methods": "GET, POST, OPTIONS", "access-control-allow-headers": "content-type", vary: "origin" } : {};
 }
@@ -39,6 +53,7 @@ export default {
     if (url.pathname === "/ws") return handleSocket(req, env, url);
     if (url.pathname === "/api/rooms") return handleRooms(req, env, url);
     if (url.pathname === "/api/scores") return handleScores(req, env, url);
+    if (url.pathname === "/api/runs") return handleRuns(req, env, url);
     return env.ASSETS.fetch(req);
   },
 } satisfies ExportedHandler<Env>;
@@ -102,6 +117,13 @@ async function handleScores(req: Request, env: Env, url: URL): Promise<Response>
       return json({ scores: rows.map((r, i) => ({ rank: i + 1, ...r })) }, 200, { ...headers, "cache-control": "public, max-age=30" });
     }
     if (req.method !== "POST") return json({ error: "method" }, 405, headers);
+    const problem = browserPostProblem(req, origin);
+    const ip = req.headers.get("cf-connecting-ip") ?? "local";
+    if (problem) {
+      // Logged like any other attempt, so scripted submits show up in the private log.
+      await submitScore(store, { rejected: problem }, await sha256Hex(ip), Date.now(), traceOf(req, ip), problem);
+      return json({ error: "forbidden" }, 403, headers);
+    }
 
     const text = await req.text();
     if (text.length > MAX_SCORE_BODY) return json({ error: "too_large" }, 413, headers);
@@ -111,7 +133,6 @@ async function handleScores(req: Request, env: Env, url: URL): Promise<Response>
     } catch {
       return json({ error: "bad_request" }, 400, headers);
     }
-    const ip = req.headers.get("cf-connecting-ip") ?? "local";
     const result = await submitScore(store, body, await sha256Hex(ip), Date.now(), traceOf(req, ip));
     if (result.ok) return json({ rank: result.rank }, 201, headers);
     return json({ error: result.status === 429 ? "rate_limited" : "invalid", reason: result.reason }, result.status, headers);
@@ -134,6 +155,32 @@ function traceOf(req: Request, ip: string): SubmitTrace {
     colo: str(cf.colo),
     userAgent: req.headers.get("user-agent"),
   };
+}
+
+/** POST: a one-time ticket for a starting 1P run; the score submit must bring it back (see scores.ts). */
+async function handleRuns(req: Request, env: Env, url: URL): Promise<Response> {
+  const origin = allowedOrigin(req, url);
+  if (origin === null) return json({ error: "forbidden" }, 403);
+  const headers = cors(origin);
+  if (req.method === "OPTIONS") return new Response(null, { status: 204, headers });
+  if (req.method !== "POST") return json({ error: "method" }, 405, headers);
+  if (browserPostProblem(req, origin)) return json({ error: "forbidden" }, 403, headers);
+  try {
+    const text = await req.text();
+    if (text.length > 200) return json({ error: "too_large" }, 413, headers);
+    let body: unknown;
+    try {
+      body = JSON.parse(text);
+    } catch {
+      return json({ error: "bad_request" }, 400, headers);
+    }
+    const ip = req.headers.get("cf-connecting-ip") ?? "local";
+    const r = await issueTicket(new D1ScoreStore(env.DB), body, await sha256Hex(ip), Date.now(), () => crypto.randomUUID());
+    if (r.ok) return json({ ticket: r.ticket }, 201, headers);
+    return json({ error: r.status === 429 ? "rate_limited" : "invalid" }, r.status, headers);
+  } catch {
+    return json({ error: "unavailable" }, 503, headers);
+  }
 }
 
 async function handleSocket(req: Request, env: Env, url: URL): Promise<Response> {

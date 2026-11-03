@@ -1,5 +1,5 @@
 import type { MapId } from "@kampung/protocol";
-import { SUBMISSION_LOG_DAYS, type NewScore, type ScoreMode, type ScoreRow, type ScoreStore, type SubmissionLog } from "./scores";
+import { SUBMISSION_LOG_DAYS, TICKET_MAX_AGE_MS, type NewScore, type ScoreMode, type ScoreRow, type ScoreStore, type SubmissionLog } from "./scores";
 
 const SCHEMA = [
   `CREATE TABLE IF NOT EXISTS scores (
@@ -37,6 +37,15 @@ const SCHEMA = [
   )`,
   "CREATE INDEX IF NOT EXISTS score_submissions_at ON score_submissions (at)",
   "CREATE INDEX IF NOT EXISTS score_submissions_ip ON score_submissions (ip, at)",
+  // One-time run tickets (see scores.ts): issued at run start, used up by the score submit.
+  `CREATE TABLE IF NOT EXISTS run_tickets (
+    id TEXT PRIMARY KEY,
+    map TEXT NOT NULL,
+    ip_hash TEXT NOT NULL,
+    issued_at INTEGER NOT NULL,
+    used_at INTEGER
+  )`,
+  "CREATE INDEX IF NOT EXISTS run_tickets_ip ON run_tickets (ip_hash, issued_at)",
 ];
 
 let schemaReady: Promise<unknown> | null = null;
@@ -85,6 +94,29 @@ export class D1ScoreStore implements ScoreStore {
     if (e.at % 50 === 0) {
       await this.db.prepare("DELETE FROM score_submissions WHERE at < ?").bind(e.at - SUBMISSION_LOG_DAYS * 86_400_000).run();
     }
+  }
+
+  async addTicket(id: string, map: MapId, ipHash: string, now: number): Promise<void> {
+    await ensureSchema(this.db);
+    await this.db.prepare("INSERT INTO run_tickets (id, map, ip_hash, issued_at) VALUES (?,?,?,?)").bind(id, map, ipHash, now).run();
+    // Now and then, drop tickets too old to be used.
+    if (now % 50 === 0) await this.db.prepare("DELETE FROM run_tickets WHERE issued_at < ?").bind(now - 2 * TICKET_MAX_AGE_MS).run();
+  }
+
+  async recentTickets(ipHash: string, sinceMs: number): Promise<number> {
+    await ensureSchema(this.db);
+    const r = await this.db.prepare("SELECT COUNT(*) AS n FROM run_tickets WHERE ip_hash = ? AND issued_at > ?").bind(ipHash, sinceMs).first<{ n: number }>();
+    return r?.n ?? 0;
+  }
+
+  async useTicket(id: string, now: number): Promise<{ issuedAt: number; map: MapId } | null> {
+    await ensureSchema(this.db);
+    // One statement marks it used and returns it, so two submits with the same ticket cannot both succeed.
+    const r = await this.db
+      .prepare("UPDATE run_tickets SET used_at = ? WHERE id = ? AND used_at IS NULL RETURNING issued_at, map")
+      .bind(now, id)
+      .first<{ issued_at: number; map: MapId }>();
+    return r ? { issuedAt: r.issued_at, map: r.map } : null;
   }
 
   async countHigher(map: MapId, mode: ScoreMode, score: number): Promise<number> {
