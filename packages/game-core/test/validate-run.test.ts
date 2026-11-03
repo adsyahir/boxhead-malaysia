@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { maxScore, totalSpawned, validateNickname, validateRun } from "../src";
+import { maxScore, maxScoreForKills, totalSpawned, validateNickname, validateRun } from "../src";
 
 const good = { score: 5000, wave: 3, kills: 30, durationMs: 90_000 };
 
@@ -33,8 +33,11 @@ describe("validateRun", () => {
     expect(validateRun(run).ok).toBe(false);
   });
 
-  it("accepts boundary values", () => {
-    expect(validateRun({ score: maxScore(3), wave: 3, kills: totalSpawned(3), durationMs: 30_000 }).ok).toBe(true);
+  it("accepts boundary values, and nothing past them", () => {
+    const top = maxScoreForKills(totalSpawned(3), 3);
+    expect(validateRun({ score: top, wave: 3, kills: totalSpawned(3), durationMs: 30_000 }).ok).toBe(true);
+    expect(validateRun({ score: top + 10, wave: 3, kills: totalSpawned(3), durationMs: 30_000 }).ok).toBe(false);
+    expect(validateRun({ score: top, wave: 3, kills: totalSpawned(3), durationMs: 29_999 }).ok).toBe(false);
   });
 });
 
@@ -50,4 +53,25 @@ describe("validateNickname", () => {
   it.each(["Babi123", "f_u_c_k", "S1AL", "xxBodohxx", "sh1t"])("rejects bad word %s", (n) => {
     expect(validateNickname(n).ok).toBe(false);
   });
+
+  it.each(["kote", "Kote Besar", "k0t3", "KOTEK", "Pukimak", "pepek", "butoh", "lancau", "cibai", "Lanjiao", "haram jadah", "kepala bapak"])(
+    "rejects Malay / local vulgar word %s",
+    (n) => {
+      expect(validateNickname(n).ok).toBe(false);
+    },
+  );
+
+  it.each(["fuck", "FUCK you", "fuuuck", "f-u-c-k", "fck", "Bitch", "b1tch", "cunt", "pussy", "5hit", "a55hole", "nigga"])(
+    "rejects English vulgar word %s",
+    (n) => {
+      expect(validateNickname(n).ok).toBe(false);
+    },
+  );
+
+  it.each(["Nazir", "Nazim", "Grape", "Ashraf", "Hakim", "Kimi", "Ah Meng", "Muthu", "Kavitha", "Pak Cik Hamid", "Mak Cik Kiah", "Shahrul", "Assassin", "Puteri", "Kotaraya"])(
+    "still accepts the ordinary name %s",
+    (n) => {
+      expect(validateNickname(n)).toEqual({ ok: true });
+    },
+  );
 });
