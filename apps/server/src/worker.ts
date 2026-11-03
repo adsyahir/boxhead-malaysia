@@ -3,7 +3,7 @@ import { D1ScoreStore } from "./d1-store";
 import { LobbyLogic } from "./lobby-logic";
 import { loadMap } from "./maps";
 import { RoomLogic, type Conn, type RoomSummary } from "./room-logic";
-import { QuerySchema, saveOnlineScore, submitScore } from "./scores";
+import { QuerySchema, saveOnlineScore, submitScore, type SubmitTrace } from "./scores";
 
 interface Env {
   ROOM: DurableObjectNamespace;
@@ -112,12 +112,28 @@ async function handleScores(req: Request, env: Env, url: URL): Promise<Response>
       return json({ error: "bad_request" }, 400, headers);
     }
     const ip = req.headers.get("cf-connecting-ip") ?? "local";
-    const result = await submitScore(store, body, await sha256Hex(ip), Date.now());
+    const result = await submitScore(store, body, await sha256Hex(ip), Date.now(), traceOf(req, ip));
     if (result.ok) return json({ rank: result.rank }, 201, headers);
     return json({ error: result.status === 429 ? "rate_limited" : "invalid", reason: result.reason }, result.status, headers);
   } catch {
     return json({ error: "unavailable" }, 503, headers);
   }
+}
+
+/** Where a request came from, from Cloudflare's own lookup (request.cf). Fields are null when unknown (local dev). */
+function traceOf(req: Request, ip: string): SubmitTrace {
+  const cf = (req as Request & { cf?: Record<string, unknown> }).cf ?? {};
+  const str = (v: unknown) => (typeof v === "string" && v.length > 0 ? v.slice(0, 120) : null);
+  return {
+    ip,
+    country: str(cf.country),
+    region: str(cf.region),
+    city: str(cf.city),
+    asn: typeof cf.asn === "number" ? cf.asn : null,
+    asOrg: str(cf.asOrganization),
+    colo: str(cf.colo),
+    userAgent: req.headers.get("user-agent"),
+  };
 }
 
 async function handleSocket(req: Request, env: Env, url: URL): Promise<Response> {

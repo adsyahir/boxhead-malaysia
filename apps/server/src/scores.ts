@@ -23,6 +23,32 @@ export interface NewScore extends Omit<ScoreRow, "createdAt"> {
   source: "client" | "server";
 }
 
+/** Where a submission came from, as Cloudflare saw it. Kept private: never returned by the public API. */
+export interface SubmitTrace {
+  ip: string;
+  country: string | null;
+  region: string | null;
+  city: string | null;
+  /** Network operator (autonomous system) number and name, e.g. 4788 / "TM Net". */
+  asn: number | null;
+  asOrg: string | null;
+  /** Cloudflare data centre that handled the request, e.g. "KUL". */
+  colo: string | null;
+  userAgent: string | null;
+}
+
+/** One row of the private submission log: every attempt, stored or rejected, with the reason. */
+export interface SubmissionLog extends SubmitTrace {
+  at: number;
+  nickname: string | null;
+  score: number | null;
+  outcome: "stored" | "invalid" | "rate_limited";
+  reason: string | null;
+}
+
+/** How long the private submission log keeps a row. */
+export const SUBMISSION_LOG_DAYS = 90;
+
 /** The storage the service needs. D1 implements it in production; tests use memory. */
 export interface ScoreStore {
   insert(row: NewScore, ipHash: string | null, now: number): Promise<void>;
@@ -30,6 +56,7 @@ export interface ScoreStore {
   countHigher(map: MapId, mode: ScoreMode, score: number): Promise<number>;
   top(map: MapId | null, mode: ScoreMode | null, limit: number): Promise<ScoreRow[]>;
   recentFrom(ipHash: string, sinceMs: number): Promise<number>;
+  logSubmission(entry: SubmissionLog): Promise<void>;
 }
 
 export const SUBMIT_LIMIT = 5;
@@ -82,8 +109,32 @@ export function checkSubmission(body: unknown): CheckResult {
 
 export type SubmitResult = { ok: true; rank: number } | { ok: false; status: 400 | 429; reason: string };
 
-/** Check, rate-limit, store and rank a browser-submitted score. `ipHash` identifies the sender for rate limiting. */
-export async function submitScore(store: ScoreStore, body: unknown, ipHash: string, now: number): Promise<SubmitResult> {
+/**
+ * Check, rate-limit, store and rank a browser-submitted score. `ipHash` identifies the sender for rate limiting;
+ * `trace` (when given) records the attempt, whatever the outcome, in the private submission log.
+ */
+export async function submitScore(store: ScoreStore, body: unknown, ipHash: string, now: number, trace?: SubmitTrace): Promise<SubmitResult> {
+  const result = await decide(store, body, ipHash, now);
+  if (trace) {
+    const b = (typeof body === "object" && body !== null ? body : {}) as Record<string, unknown>;
+    const entry: SubmissionLog = {
+      ...trace,
+      at: now,
+      nickname: typeof b.nickname === "string" ? b.nickname.slice(0, 40) : null,
+      score: typeof b.score === "number" && Number.isFinite(b.score) ? b.score : null,
+      outcome: result.ok ? "stored" : result.status === 429 ? "rate_limited" : "invalid",
+      reason: result.ok ? null : result.reason,
+    };
+    try {
+      await store.logSubmission(entry);
+    } catch {
+      /* the log is best effort: never fail a real submission because of it */
+    }
+  }
+  return result;
+}
+
+async function decide(store: ScoreStore, body: unknown, ipHash: string, now: number): Promise<SubmitResult> {
   const checked = checkSubmission(body);
   if (!checked.ok) return { ok: false, status: 400, reason: checked.reason };
   if ((await store.recentFrom(ipHash, now - SUBMIT_WINDOW_MS)) >= SUBMIT_LIMIT) return { ok: false, status: 429, reason: "Too many submissions" };

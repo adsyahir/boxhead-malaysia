@@ -1,5 +1,5 @@
 import type { MapId } from "@kampung/protocol";
-import type { NewScore, ScoreMode, ScoreRow, ScoreStore } from "./scores";
+import { SUBMISSION_LOG_DAYS, type NewScore, type ScoreMode, type ScoreRow, type ScoreStore, type SubmissionLog } from "./scores";
 
 const SCHEMA = [
   `CREATE TABLE IF NOT EXISTS scores (
@@ -18,6 +18,25 @@ const SCHEMA = [
   )`,
   "CREATE INDEX IF NOT EXISTS scores_board ON scores (map, mode, score DESC)",
   "CREATE INDEX IF NOT EXISTS scores_ip ON scores (ip_hash, created_at)",
+  // Private log of every submit attempt (stored or rejected) and where it came from. Never read by the public API.
+  `CREATE TABLE IF NOT EXISTS score_submissions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    at INTEGER NOT NULL,
+    outcome TEXT NOT NULL,
+    reason TEXT,
+    nickname TEXT,
+    score INTEGER,
+    ip TEXT NOT NULL,
+    country TEXT,
+    region TEXT,
+    city TEXT,
+    asn INTEGER,
+    as_org TEXT,
+    colo TEXT,
+    user_agent TEXT
+  )`,
+  "CREATE INDEX IF NOT EXISTS score_submissions_at ON score_submissions (at)",
+  "CREATE INDEX IF NOT EXISTS score_submissions_ip ON score_submissions (ip, at)",
 ];
 
 let schemaReady: Promise<unknown> | null = null;
@@ -52,6 +71,20 @@ export class D1ScoreStore implements ScoreStore {
       .prepare("INSERT INTO scores (nickname, score, wave, kills, level, map, mode, duration_ms, created_at, ip_hash, source) VALUES (?,?,?,?,?,?,?,?,?,?,?)")
       .bind(row.nickname, row.score, row.wave, row.kills, row.level, row.map, row.mode, row.durationMs, now, ipHash, row.source)
       .run();
+  }
+
+  async logSubmission(e: SubmissionLog): Promise<void> {
+    await ensureSchema(this.db);
+    await this.db
+      .prepare(
+        "INSERT INTO score_submissions (at, outcome, reason, nickname, score, ip, country, region, city, asn, as_org, colo, user_agent) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+      )
+      .bind(e.at, e.outcome, e.reason, e.nickname, e.score, e.ip, e.country, e.region, e.city, e.asn, e.asOrg, e.colo, e.userAgent?.slice(0, 300) ?? null)
+      .run();
+    // Now and then, drop rows past the retention period so IP addresses are not kept for ever.
+    if (e.at % 50 === 0) {
+      await this.db.prepare("DELETE FROM score_submissions WHERE at < ?").bind(e.at - SUBMISSION_LOG_DAYS * 86_400_000).run();
+    }
   }
 
   async countHigher(map: MapId, mode: ScoreMode, score: number): Promise<number> {

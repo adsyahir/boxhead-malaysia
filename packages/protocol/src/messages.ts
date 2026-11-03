@@ -18,7 +18,8 @@ export const NET = {
   inputHz: 30,
   /** The server sends a snapshot every N simulation ticks (60 Hz / 3 = 20 Hz). */
   snapshotEveryTicks: 3,
-  pingMs: 20_000,
+  /** Ping interval: keeps the socket alive and feeds the ping readout in the performance overlay. */
+  pingMs: 2_000,
   reconnectGraceMs: 30_000,
   maxMessageBytes: 2048,
 } as const;

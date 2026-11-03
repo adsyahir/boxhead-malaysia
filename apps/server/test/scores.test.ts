@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { levelForKills, maxScore, totalSpawned } from "@kampung/game-core";
 import type { MapId } from "@kampung/protocol";
-import { SUBMIT_LIMIT, SUBMIT_WINDOW_MS, checkSubmission, saveOnlineScore, submitScore, type NewScore, type ScoreMode, type ScoreRow, type ScoreStore } from "../src/scores";
+import { SUBMIT_LIMIT, SUBMIT_WINDOW_MS, checkSubmission, saveOnlineScore, submitScore, type NewScore, type ScoreMode, type ScoreRow, type ScoreStore, type SubmissionLog, type SubmitTrace } from "../src/scores";
 
 class MemoryStore implements ScoreStore {
   rows: { row: NewScore; ip: string | null; at: number }[] = [];
@@ -20,6 +20,12 @@ class MemoryStore implements ScoreStore {
   }
   async recentFrom(ip: string, since: number) {
     return this.rows.filter((r) => r.ip === ip && r.at > since).length;
+  }
+  log: SubmissionLog[] = [];
+  failLog = false;
+  async logSubmission(e: SubmissionLog) {
+    if (this.failLog) throw new Error("log down");
+    this.log.push(e);
   }
 }
 
@@ -75,8 +81,8 @@ describe("submitScore", () => {
     expect(await submitScore(store, { ...good, score: 5000 }, "ip2", 1001)).toEqual({ ok: true, rank: 1 });
     expect(await submitScore(store, { ...good, score: 4000 }, "ip3", 1002)).toEqual({ ok: true, rank: 2 });
     expect(await submitScore(store, { ...good, score: 4000 }, "ip4", 1003)).toEqual({ ok: true, rank: 2 }); // a tie shares the rank
-    expect(await submitScore(store, { ...good, score: 100, mode: "2p" }, "ip5", 1004)).toEqual({ ok: true, rank: 1 }); // another board
-    expect(await submitScore(store, { ...good, score: 100, map: "kebun-getah" }, "ip6", 1005)).toEqual({ ok: true, rank: 1 });
+    expect(await submitScore(store, { ...good, score: 2400, mode: "2p" }, "ip5", 1004)).toEqual({ ok: true, rank: 1 }); // another board
+    expect(await submitScore(store, { ...good, score: 2400, map: "kebun-getah" }, "ip6", 1005)).toEqual({ ok: true, rank: 1 });
   });
 
   it("returns a 400 with the reason for a bad score and stores nothing", async () => {
@@ -88,7 +94,7 @@ describe("submitScore", () => {
 
   it("allows 5 submissions a minute per sender, then 429, then allows again", async () => {
     const store = new MemoryStore();
-    for (let i = 0; i < SUBMIT_LIMIT; i++) expect((await submitScore(store, { ...good, score: 1000 + i }, "same", 1000 + i)).ok).toBe(true);
+    for (let i = 0; i < SUBMIT_LIMIT; i++) expect((await submitScore(store, { ...good, score: 3000 + i * 10 }, "same", 1000 + i)).ok).toBe(true);
     expect(await submitScore(store, good, "same", 2000)).toMatchObject({ ok: false, status: 429 });
     expect((await submitScore(store, good, "someone-else", 2000)).ok).toBe(true);
     expect((await submitScore(store, good, "same", 1000 + SUBMIT_WINDOW_MS + 10)).ok).toBe(true);
@@ -141,5 +147,42 @@ describe("the board", () => {
     expect((await store.top("kampung-pisang", "1p", 2)).map((r) => r.nickname)).toEqual(["Best", "Old Tie"]);
     expect((await store.top(null, "2p", 50)).map((r) => r.nickname)).toEqual(["Two Player"]);
     expect((await store.top(null, null, 50))[0]!.nickname).toBe("Other Map");
+  });
+});
+
+describe("private submission log", () => {
+  const trace: SubmitTrace = { ip: "203.0.113.7", country: "MY", region: "Selangor", city: "Shah Alam", asn: 4788, asOrg: "TM Net", colo: "KUL", userAgent: "Mozilla/5.0" };
+
+  it("records stored and rejected attempts with where they came from", async () => {
+    const store = new MemoryStore();
+    await submitScore(store, good, "h1", 1000, trace);
+    await submitScore(store, { ...good, score: 9_999_990 }, "h1", 2000, trace); // edited in transit
+    await submitScore(store, { ...good, nickname: "kote" }, "h1", 3000, trace);
+    expect(store.log.map((e) => [e.outcome, e.reason, e.nickname, e.score])).toEqual([
+      ["stored", null, "Abu Test", 5000],
+      ["invalid", "Score too high for wave", "Abu Test", 9_999_990],
+      ["invalid", "Nickname not allowed", "kote", 5000],
+    ]);
+    expect(store.log[0]).toMatchObject({ ip: "203.0.113.7", country: "MY", city: "Shah Alam", asOrg: "TM Net", at: 1000 });
+  });
+
+  it("logs rate-limited attempts and junk bodies too", async () => {
+    const store = new MemoryStore();
+    for (let i = 0; i <= SUBMIT_LIMIT; i++) await submitScore(store, { ...good, score: 3000 + i * 10 }, "same", 1000 + i, trace);
+    await submitScore(store, "not json at all", "same", 5000, trace);
+    expect(store.log.at(-2)!.outcome).toBe("rate_limited");
+    expect(store.log.at(-1)).toMatchObject({ outcome: "invalid", nickname: null, score: null });
+  });
+
+  it("never fails a real submission because the log is down", async () => {
+    const store = new MemoryStore();
+    store.failLog = true;
+    expect(await submitScore(store, good, "h1", 1000, trace)).toEqual({ ok: true, rank: 1 });
+  });
+
+  it("is not part of the public scores", async () => {
+    const store = new MemoryStore();
+    await submitScore(store, good, "h1", 1000, trace);
+    expect(JSON.stringify(await store.top(null, null, 10))).not.toContain("203.0.113.7");
   });
 });
