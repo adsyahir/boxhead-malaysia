@@ -19,6 +19,8 @@ import { SoundOffIcon, SoundOnIcon } from "./ui/Icons";
 import { Lobby, OnlineMenu, nameIsValid } from "./ui/OnlineScreens";
 import { CharacterSelect, Credits, GameOver, HowToPlay, MapSelect, Menu, ModeSelect, SettingsScreen, UpgradeList } from "./ui/Screens";
 import TouchControls from "./ui/TouchControls";
+import PerfOverlay from "./ui/PerfOverlay";
+import type { PerfStats } from "./engine/perf";
 
 const TOAST_MS = 1600;
 
@@ -83,6 +85,7 @@ export default function Game3D() {
   const firstRef = useRef<Character | null>(null);
   firstRef.current = firstPick;
   const [hud, setHud] = useState<HudState | null>(null);
+  const [perf, setPerf] = useState<PerfStats | null>(null);
   const hudRef = useRef<HudState | null>(null);
   hudRef.current = hud;
   const [confirmExit, setConfirmExit] = useState(false);
@@ -348,6 +351,7 @@ export default function Game3D() {
         onHud: (s) => setHud(s),
         onToast: pushToast,
         onEnding: () => setEnding(true),
+        onPerf: (s) => setPerf(s),
         onGameOver: (r) => {
           setRun(r);
           setEnding(false);
@@ -471,8 +475,7 @@ export default function Game3D() {
         else if (d === 5) go("Credits");
       } else if (s === "Mode") {
         if (d === 1) pickMode(1);
-        else if (d === 2 && !isTouchDevice()) pickMode(2);
-        else if (d === 3) go("Online");
+        else if (d === 2) go("Online");
       } else if (s === "Character") {
         const hero = CHARACTERS[d - 1];
         if (hero) pickCharacter(hero);
@@ -499,6 +502,7 @@ export default function Game3D() {
       <div ref={host} className="game-host g3d-host" />
       <div ref={floatLayer} className="g3d-floats" />
       {screen === "Game" && touch && !ending && <TouchControls />}
+      {screen === "Game" && perf && <PerfOverlay stats={perf} />}
       {screen === "Game" && hud && (
         <Hud
           hud={isOnline ? { ...hud, paused: onlineMenu } : hud}

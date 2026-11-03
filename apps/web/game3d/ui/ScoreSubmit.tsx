@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { hasBadWord } from "@kampung/game-core";
 import { NICK_KEY, type RunSummary } from "../../game/constants";
 import { useT } from "../../settings/react";
 import { submitScore } from "../net/scores";
@@ -67,7 +68,7 @@ export default function ScoreSubmit({ run }: { run: RunSummary }) {
           {status.kind === "sending" ? t("submitting") : status.kind === "error" ? t("boardRetry") : t("submitButton")}
         </button>
       </div>
-      {!ok && name.length > 0 && <p className="g3d-note bad">{t("nameHint")}</p>}
+      {!ok && name.length > 0 && <p className="g3d-note bad">{hasBadWord(name) ? t("nameNotAllowed") : t("nameHint")}</p>}
       {status.kind === "error" && (
         <p className="g3d-error" role="alert">
           {t(status.message)}

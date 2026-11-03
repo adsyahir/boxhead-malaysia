@@ -33,6 +33,9 @@ export class OnlineClient {
   status: LinkStatus = "idle";
   /** Round-trip time of the last ping, in ms. */
   rtt = 0;
+  /** Recent round trips (newest last) and snapshot arrival times, for the performance overlay. */
+  readonly rtts: number[] = [];
+  private readonly snapTimes: number[] = [];
   /** Called with every snapshot the moment it arrives (not delayed like the playback buffer): used to reconcile prediction. */
   onRawSnapshot: ((snap: Snapshot, atMs: number) => void) | null = null;
   /** Debug only (`?debug&lag=120`): delay everything this many ms each way, to feel a slow connection. */
@@ -154,6 +157,8 @@ export class OnlineClient {
         return;
       case "snap": {
         const at = performance.now();
+        this.snapTimes.push(at);
+        while (this.snapTimes.length > 0 && this.snapTimes[0]! < at - 1000) this.snapTimes.shift();
         this.onRawSnapshot?.(m.s, at);
         this.buffer.push(at, m.s, m.e);
         return;
@@ -170,8 +175,15 @@ export class OnlineClient {
         return;
       case "pong":
         this.rtt = performance.now() - this.pingSent;
+        this.rtts.push(this.rtt);
+        if (this.rtts.length > 8) this.rtts.shift();
         return;
     }
+  }
+
+  /** Snapshots received in the last second (the server sends 20 a second). */
+  snapsPerSec(now = performance.now()): number {
+    return this.snapTimes.filter((t) => t >= now - 1000).length;
   }
 
   send(msg: ClientMsg): void {

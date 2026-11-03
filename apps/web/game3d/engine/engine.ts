@@ -15,6 +15,8 @@ import type { OnlineClient } from "../net/client";
 import { Predictor } from "../net/predictor";
 import { UNIT_BOX, UNIT_QUAD } from "./batch";
 import { CameraRig } from "./camera";
+import { MouseAim } from "./mouse-aim";
+import { PerfMeter, pingSummary, type PerfStats } from "./perf";
 import { toX, toZ } from "./coords";
 import { EntityView } from "./entities";
 import { FloatText } from "./float-text";
@@ -34,6 +36,8 @@ export interface EngineCallbacks {
   /** The run just ended; the UI should start fading out. */
   onEnding(): void;
   onGameOver(run: RunSummary): void;
+  /** Twice a second during a run, only while Settings > Performance display is on. */
+  onPerf?(stats: PerfStats | null): void;
 }
 
 type Mode = "idle" | "backdrop" | "game" | "over";
@@ -69,6 +73,9 @@ export class Engine {
   private mapKey = "kampung-pisang";
   private playerCount: 1 | 2 = 1;
   private keyboard: WindowKeyboard | null = null;
+  private mouse: MouseAim | null = null;
+  private readonly perf = new PerfMeter();
+  private perfAt = 0;
   /** Set while playing a room: the world is rebuilt from server snapshots instead of simulated here. */
   private online: { link: OnlineClient; you: Slot; taps: number; sel: number | undefined; predictor: Predictor | null } | null = null;
   private acc = 0;
@@ -174,7 +181,10 @@ export class Engine {
     this.paused = false;
     this.ended = false;
     this.frames = 0;
-    if (!this.touch) this.keyboard = new WindowKeyboard(players);
+    if (!this.touch) {
+      this.keyboard = new WindowKeyboard(players);
+      this.mouse = new MouseAim(this.canvas);
+    }
     const f = this.focusPoints();
     const fx = f.reduce((s, p) => s + p.x, 0) / f.length;
     const fz = f.reduce((s, p) => s + p.z, 0) / f.length;
@@ -211,7 +221,10 @@ export class Engine {
     this.paused = false;
     this.ended = false;
     this.frames = 0;
-    if (!this.touch) this.keyboard = new WindowKeyboard(1);
+    if (!this.touch) {
+      this.keyboard = new WindowKeyboard(1);
+      this.mouse = new MouseAim(this.canvas);
+    }
     const me = this.world.players[you]!;
     this.cam.snap(toX(me.x), toZ(me.y));
     this.mode = "game";
@@ -297,6 +310,8 @@ export class Engine {
     this.endTimer = null;
     this.keyboard?.destroy();
     this.keyboard = null;
+    this.mouse?.destroy();
+    this.mouse = null;
     if (this.online) this.online.link.onRawSnapshot = null;
     this.online = null;
     this.dread.silence();
@@ -334,7 +349,19 @@ export class Engine {
 
   private sampleInputs(): { inputs: PlayerInput[]; swapTapped: boolean[] } {
     if (this.touch) return sampleTouch();
-    return this.keyboard ? this.keyboard.sample() : { inputs: [], swapTapped: [] };
+    const sampled = this.keyboard ? this.keyboard.sample() : { inputs: [], swapTapped: [] };
+    const mine = sampled.inputs[0];
+    const hero = this.world?.players[this.online ? this.online.you : 0];
+    if (mine && hero && this.mouse) {
+      // The local hero (inputs[0], also online) faces the cursor once the mouse is in use; left click fires.
+      const aim = this.mouse.aim(this.cam.camera, hero.x, hero.y);
+      if (aim) {
+        mine.aimX = aim.x;
+        mine.aimY = aim.y;
+      }
+      mine.fire = mine.fire || this.mouse.fire;
+    }
+    return sampled;
   }
 
   private publishHud(): void {
@@ -483,6 +510,31 @@ export class Engine {
     this.floatText.update(vdt, this.cam.camera, this.width, this.height);
     this.renderer.render(this.scene, this.cam.camera);
     // smoothed CPU cost of a frame (sim + scene sync + draw submission), exposed as data-ms for profiling
-    this.cpuMs += (performance.now() - now - this.cpuMs) * 0.05;
+    const cpu = performance.now() - now;
+    this.cpuMs += (cpu - this.cpuMs) * 0.05;
+    this.reportPerf(now, frameDt * 1000, cpu);
   };
+
+  /** Feeds the performance overlay twice a second during a run, only while it is switched on in Settings. */
+  private reportPerf(now: number, frameMs: number, cpuMs: number): void {
+    if (!this.cb.onPerf) return;
+    const on = this.mode === "game" && getSettings().perf;
+    if (!on) {
+      if (this.perfAt !== 0) {
+        this.perfAt = 0;
+        this.cb.onPerf(null);
+      }
+      return;
+    }
+    this.perf.add(now, frameMs, cpuMs);
+    if (now - this.perfAt < 500) return;
+    this.perfAt = now;
+    const stats: PerfStats = this.perf.summary();
+    if (this.online) {
+      const link = this.online.link;
+      const st = this.online.predictor?.stats;
+      stats.online = { ...pingSummary(link.rtts), snapsPerSec: link.snapsPerSec(now), predictErrPx: st && st.reconciles > 0 ? st.lastError : null };
+    }
+    this.cb.onPerf(stats);
+  }
 }

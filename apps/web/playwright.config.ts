@@ -16,9 +16,10 @@ export default defineConfig({
     channel: "chrome",
   },
   webServer: ci
-    ? [{ command: "npx next build && cd ../server && npx wrangler dev --port 8787", url: "http://localhost:8787", reuseExistingServer: true, timeout: 300_000 }]
+    ? [{ command: "npx next build && cd ../server && rm -rf .wrangler/e2e-state && npx wrangler dev --port 8787 --persist-to .wrangler/e2e-state", url: "http://localhost:8787", reuseExistingServer: true, timeout: 300_000 }]
     : [
         { command: "npx next dev -p 3100", url: "http://localhost:3100", reuseExistingServer: true, timeout: 180_000 },
-        { command: "npx wrangler dev --port 8787", cwd: "../server", url: "http://localhost:8787", reuseExistingServer: true, timeout: 180_000 },
+        // A fresh database each run (not the dev one), so the leaderboard holds only this run's scores.
+        { command: "rm -rf .wrangler/e2e-state && npx wrangler dev --port 8787 --persist-to .wrangler/e2e-state", cwd: "../server", url: "http://localhost:8787", reuseExistingServer: true, timeout: 180_000 },
       ],
 });

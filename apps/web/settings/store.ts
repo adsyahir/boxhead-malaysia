@@ -8,9 +8,11 @@ export interface Settings {
   volume: number;
   muted: boolean;
   quality: Quality;
+  /** Performance display: FPS and frame time, plus ping and network numbers when online. */
+  perf: boolean;
 }
 
-export const DEFAULT_SETTINGS: Settings = { lang: "ms", volume: 0.8, muted: false, quality: "high" };
+export const DEFAULT_SETTINGS: Settings = { lang: "ms", volume: 0.8, muted: false, quality: "high", perf: false };
 
 const KEY = "kpp-settings";
 const LEGACY_MUTE_KEY = "kpp-mute";
@@ -27,6 +29,7 @@ function clean(raw: unknown): Partial<Settings> {
   if (typeof r.volume === "number" && Number.isFinite(r.volume)) out.volume = Math.min(1, Math.max(0, r.volume));
   if (typeof r.muted === "boolean") out.muted = r.muted;
   if (r.quality === "high" || r.quality === "low") out.quality = r.quality;
+  if (typeof r.perf === "boolean") out.perf = r.perf;
   return out;
 }
 
@@ -56,7 +59,7 @@ export function getSettings(): Settings {
 export function updateSettings(patch: Partial<Settings>): void {
   load();
   const next = { ...state, ...clean(patch) };
-  if (next.lang === state.lang && next.volume === state.volume && next.muted === state.muted && next.quality === state.quality) return;
+  if ((Object.keys(next) as (keyof Settings)[]).every((k) => next[k] === state[k])) return;
   state = next;
   try {
     window.localStorage.setItem(KEY, JSON.stringify(state));

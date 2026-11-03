@@ -145,6 +145,60 @@ test("touch: dragging the Fire stick aims and shoots that way while the left sti
   await ctx.close();
 });
 
+test("desktop: the hero aims at the mouse and left click fires", async ({ page }) => {
+  await page.goto("/?debug");
+  await page.getByRole("button", { name: /Mula/ }).click({ timeout: 30_000 });
+  await page.getByRole("button", { name: /1 Pemain/ }).click();
+  await page.getByRole("button", { name: /Abu/ }).click();
+  await page.getByRole("button", { name: /Kampung Pisang/ }).click();
+  const canvas = page.locator("canvas");
+  await expect(canvas).toHaveAttribute("data-scene", "Game", { timeout: 20_000 });
+  await expect.poll(() => canvas.getAttribute("data-tick").then(Number), { timeout: 10_000 }).toBeGreaterThan(30);
+  type W = { players: { facing: { x: number; y: number } }[]; projectiles: { vx: number; vy: number }[] };
+  const world = () => page.evaluate(() => (window as unknown as { __kppWorld(): W }).__kppWorld());
+  const box = (await canvas.boundingBox())!;
+  const cx = box.x + box.width / 2;
+  const cy = box.y + box.height / 2;
+
+  // The camera keeps the hero near the middle: point the mouse well to the right, then well above.
+  await page.mouse.move(cx + box.width * 0.4, cy);
+  await expect.poll(async () => (await world()).players[0]!.facing.x, { timeout: 5000 }).toBeGreaterThan(0.9);
+  await expect(canvas).toHaveCSS("cursor", "crosshair");
+  await page.mouse.move(cx, box.y + 20);
+  await expect.poll(async () => (await world()).players[0]!.facing.y, { timeout: 5000 }).toBeLessThan(-0.85);
+
+  await page.mouse.down();
+  await expect.poll(async () => (await world()).projectiles.filter((p) => p.vy < 0).length, { timeout: 5000 }).toBeGreaterThan(0);
+  await page.mouse.up();
+});
+
+test("Settings: the performance display switches on and shows FPS in a run, and no ping offline", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: /Tetapan/ }).click({ timeout: 30_000 });
+  const toggle = page.locator(".g3d-row", { hasText: "Paparan prestasi" }).getByRole("button");
+  await expect(toggle).toHaveAttribute("aria-pressed", "false");
+  await toggle.click();
+  await expect(toggle).toHaveAttribute("aria-pressed", "true");
+  await page.getByRole("button", { name: "Siap" }).click();
+  await page.getByRole("button", { name: /Mula/ }).click();
+  await page.getByRole("button", { name: /1 Pemain/ }).click();
+  await page.getByRole("button", { name: /Abu/ }).click();
+  await page.getByRole("button", { name: /Kampung Pisang/ }).click();
+  await expect(page.locator("canvas")).toHaveAttribute("data-scene", "Game", { timeout: 20_000 });
+  await expect(page.getByTestId("perf")).toContainText(/FPS\s*\d+/, { timeout: 5000 });
+  await expect(page.getByTestId("perf-ping")).toHaveCount(0);
+});
+
+test("mode screen has 1 Player and Online only (no local 2 player)", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: /Mula/ }).click({ timeout: 30_000 });
+  await expect(page.getByRole("button", { name: /1 Pemain/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /Dalam Talian/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /2 Pemain/ })).toHaveCount(0);
+  await page.keyboard.press("2"); // key 2 is Online now
+  await expect(page.getByLabel("Nama anda")).toBeVisible();
+});
+
 test("exit to menu asks for confirmation and only leaves on yes", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByRole("button", { name: /Mula/ })).toBeVisible({ timeout: 30_000 });
@@ -193,8 +247,9 @@ test("pause menu opens How to Play and Settings without ending the run", async (
   await expect(page.locator(".g3d-pause")).toBeHidden();
 });
 
-async function openOnline(browser: Browser, name: string): Promise<Page> {
+async function openOnline(browser: Browser, name: string, settings?: Record<string, unknown>): Promise<Page> {
   const ctx = await browser.newContext();
+  if (settings) await ctx.addInitScript((v) => localStorage.setItem("kpp-settings", v), JSON.stringify(settings));
   const page = await ctx.newPage();
   await page.goto("/");
   await page.getByRole("button", { name: /Mula/ }).click();
@@ -275,6 +330,26 @@ test("online: a public room shows up in the list and can be joined from it", asy
   await expect(row).toContainText("Abu Test");
   await row.getByRole("button", { name: "Sertai" }).click();
   await expect(guest.getByTestId("room-code")).toHaveText(code);
+  await host.context().close();
+  await guest.context().close();
+});
+
+test("online: the performance display shows ping to the room server", async ({ browser }) => {
+  const host = await openOnline(browser, "Ping Host", { perf: true });
+  await host.getByRole("button", { name: "Cipta bilik peribadi" }).click();
+  const code = (await host.getByTestId("room-code").textContent())!.trim();
+  const guest = await openOnline(browser, "Ping Guest");
+  await guest.getByPlaceholder("KOD").fill(code);
+  await guest.getByRole("button", { name: "Sertai", exact: true }).click();
+  await guest.getByRole("button", { name: "Saya sedia" }).click();
+  await host.getByRole("button", { name: "Mula Permainan" }).click();
+  await expect(host.locator("canvas")).toHaveAttribute("data-scene", "Game", { timeout: 20_000 });
+
+  const perf = host.getByTestId("perf");
+  await expect(perf).toContainText("FPS");
+  await expect(host.getByTestId("perf-ping")).toHaveText(/^\d+ ms$/, { timeout: 10_000 }); // first ping after ~2 s
+  await expect(perf).toContainText("Kemas kini");
+  await expect(guest.getByTestId("perf")).toHaveCount(0); // off unless switched on
   await host.context().close();
   await guest.context().close();
 });
@@ -434,7 +509,7 @@ test("leaderboard API: stores a valid score, refuses cheats, rate-limits, and li
   const ip = randomIp();
   const post = (body: unknown, h: Record<string, string> = { "cf-connecting-ip": ip }) => request.post(`${API}/api/scores`, { data: body, headers: h });
 
-  const ok = await post({ ...run, nickname: `Api${Date.now() % 1_000_000}`, score: 7777 });
+  const ok = await post({ ...run, nickname: `Api${Date.now() % 1_000_000}`, score: 7770 });
   expect(ok.status()).toBe(201);
   expect(((await ok.json()) as { rank: number }).rank).toBeGreaterThanOrEqual(1);
 
@@ -442,18 +517,21 @@ test("leaderboard API: stores a valid score, refuses cheats, rate-limits, and li
   expect((await post({ ...run, durationMs: 1000 })).status()).toBe(400); // wave 3 in one second
   expect((await post({ ...run, mode: "online" })).status()).toBe(400); // online scores come from the room server only
   expect((await post({ ...run, nickname: "ab" })).status()).toBe(400);
+  expect((await post({ ...run, nickname: "kote" })).status()).toBe(400); // vulgar name
+  expect((await post({ ...run, score: 5003 })).status()).toBe(400); // not a total the game can make
+  expect((await post({ ...run, score: 900_000 })).status()).toBe(400); // more than 30 kills can earn
 
   const list = await request.get(`${API}/api/scores?map=kampung-pisang&mode=1p&limit=100`);
   expect(list.status()).toBe(200);
   expect(list.headers()["cache-control"]).toContain("max-age=30");
   const { scores } = (await list.json()) as { scores: { rank: number; score: number }[] };
-  expect(scores.some((s) => s.score === 7777)).toBe(true);
+  expect(scores.some((s) => s.score === 7770)).toBe(true);
   for (let i = 1; i < scores.length; i++) expect(scores[i - 1]!.score).toBeGreaterThanOrEqual(scores[i]!.score);
 
   // the same sender gets 5 stored scores a minute (1 already used above)
-  for (let i = 0; i < 4; i++) expect((await post({ ...run, score: 1000 + i })).status()).toBe(201);
-  expect((await post({ ...run, score: 2000 })).status()).toBe(429);
-  expect((await post({ ...run, score: 2000 }, { "cf-connecting-ip": randomIp() })).status()).toBe(201); // someone else is fine
+  for (let i = 0; i < 4; i++) expect((await post({ ...run, score: 3000 + i * 10 })).status()).toBe(201);
+  expect((await post({ ...run, score: 3500 })).status()).toBe(429);
+  expect((await post({ ...run, score: 3500 }, { "cf-connecting-ip": randomIp() })).status()).toBe(201); // someone else is fine
 });
 
 test("game over: submit a score with a nickname, then find it on the leaderboard", async ({ page }) => {
@@ -465,12 +543,12 @@ test("game over: submit a score with a nickname, then find it on the leaderboard
   await page.getByRole("button", { name: /Kampung Pisang/ }).click();
   await expect(page.locator("canvas")).toHaveAttribute("data-scene", "Game", { timeout: 20_000 });
 
-  // end the run now with a believable result: 40 s played, 3 kills, 1,234 points
+  // end the run now with a result the game can produce: 40 s played, 3 pocong in a row (100 x combo 1+2+3)
   await page.evaluate(() => {
     const w = (window as unknown as { __kppWorld: () => { time: number; kills: number; score: number; players: { hp: number; alive: boolean }[] } }).__kppWorld();
     w.time = 40;
     w.kills = 3;
-    w.score = 1234;
+    w.score = 600;
     w.players[0]!.hp = 0;
     w.players[0]!.alive = false;
   });
@@ -485,7 +563,7 @@ test("game over: submit a score with a nickname, then find it on the leaderboard
   await page.getByRole("link", { name: "Lihat Papan Markah" }).click();
   await expect(page.getByRole("heading", { name: "Papan Markah" })).toBeVisible();
   await expect(page.getByRole("row", { name: new RegExp(nick) })).toBeVisible({ timeout: 15_000 });
-  await expect(page.getByRole("row", { name: new RegExp(nick) })).toContainText("1,234");
+  await expect(page.getByRole("row", { name: new RegExp(nick) })).toContainText("600");
 });
 
 test("game over: a failed submit says so and can be retried with the run kept", async ({ page }) => {
@@ -500,7 +578,7 @@ test("game over: a failed submit says so and can be retried with the run kept", 
     const w = (window as unknown as { __kppWorld: () => { time: number; kills: number; score: number; players: { hp: number; alive: boolean }[] } }).__kppWorld();
     w.time = 40;
     w.kills = 3;
-    w.score = 4321;
+    w.score = 300;
     w.players[0]!.hp = 0;
     w.players[0]!.alive = false;
   });

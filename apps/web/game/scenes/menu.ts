@@ -22,7 +22,6 @@ export class MenuScene extends Phaser.Scene {
 
     const touch = isTouchDevice();
     const items: { label: string; run: () => void }[] = [{ label: t("onePlayer"), run: () => this.start(1) }];
-    if (!touch) items.push({ label: `${t("twoPlayers")} (${t("twoPlayersHint")})`, run: () => this.start(2) });
     items.push({ label: t("leaderboard"), run: () => { window.location.href = "/leaderboard"; } });
 
     items.forEach((it, i) => {
@@ -41,7 +40,6 @@ export class MenuScene extends Phaser.Scene {
 
     const kb = this.input.keyboard;
     kb?.on("keydown-ONE", () => { audio.unlock(); this.start(1); });
-    if (!touch) kb?.on("keydown-TWO", () => { audio.unlock(); this.start(2); });
     kb?.on("keydown-M", () => audio.toggleMute());
   }
 

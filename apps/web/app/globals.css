@@ -433,3 +433,15 @@ h1, h2, h3, .btn, .g3d-btn, .g3d-chip, .g3d-keycap, .g3d-title, .g3d-dead, .g3d-
 .g3d-hud, .g3d-touch { inset: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px); }
 .g3d-mute-float { top: max(10px, env(safe-area-inset-top)); right: max(10px, env(safe-area-inset-right)); }
 .g3d-back { top: max(16px, env(safe-area-inset-top)); left: max(16px, env(safe-area-inset-left)); }
+
+/* Performance display (Settings): small read-only panel under the corner buttons. */
+.g3d-perf {
+  position: absolute; z-index: 4; pointer-events: none; top: calc(max(10px, env(safe-area-inset-top)) + 70px); right: max(10px, env(safe-area-inset-right));
+  min-width: 150px; padding: 6px 10px; border-radius: 8px; background: rgba(8, 10, 20, 0.7); border: 1px solid rgba(255, 255, 255, 0.12);
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 0.72rem; line-height: 1.55; color: #d4def0;
+}
+.g3d-perf div { display: flex; justify-content: space-between; gap: 12px; }
+.g3d-perf span { color: #9fb4d0; }
+.g3d-perf .ping.good b { color: #6fdc8c; }
+.g3d-perf .ping.fair b { color: #ffd24a; }
+.g3d-perf .ping.poor b { color: #ff7a6a; }

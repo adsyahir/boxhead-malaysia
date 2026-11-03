@@ -11,7 +11,6 @@ import { useT } from "../../settings/react";
 
 const MODES: { id: BoardMode; label: Key }[] = [
   { id: "1p", label: "onePlayer" },
-  { id: "2p", label: "twoPlayers" },
   { id: "online", label: "online" },
 ];
 

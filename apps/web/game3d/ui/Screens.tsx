@@ -74,7 +74,7 @@ export function Menu(props: {
   );
 }
 
-export function ModeSelect({ touch, onPick, onOnline, onBack }: { touch: boolean; onPick(n: 1 | 2): void; onOnline(): void; onBack(): void }) {
+export function ModeSelect({ touch, onPick, onOnline, onBack }: { touch: boolean; onPick(n: 1): void; onOnline(): void; onBack(): void }) {
   const t = useT();
   return (
     <div className="g3d-screen">
@@ -85,14 +85,8 @@ export function ModeSelect({ touch, onPick, onOnline, onBack }: { touch: boolean
           {!touch && <span className="g3d-keycap">1</span>}
           {t("onePlayer")}
         </button>
-        {!touch && (
-          <button type="button" className="g3d-btn" onClick={() => onPick(2)}>
-            <span className="g3d-keycap">2</span>
-            {t("twoPlayers")} <small>({t("twoPlayersHint")})</small>
-          </button>
-        )}
         <button type="button" className="g3d-btn" onClick={onOnline}>
-          {!touch && <span className="g3d-keycap">{3}</span>}
+          {!touch && <span className="g3d-keycap">2</span>}
           {t("online")}
         </button>
       </div>
@@ -282,6 +276,13 @@ export function SettingsScreen({ onBack, inGame = false }: { onBack(): void; inG
           </select>
         </div>
         <p className="g3d-note">{t("qualityNote")}</p>
+        <div className="g3d-row">
+          <span>{t("perfDisplay")}</span>
+          <button type="button" className={`g3d-chip${s.perf ? " on" : ""}`} onClick={() => updateSettings({ perf: !s.perf })} aria-pressed={s.perf}>
+            {s.perf ? t("fullscreenOn") : t("fullscreenOff")}
+          </button>
+        </div>
+        <p className="g3d-note">{t("perfNote")}</p>
         {inGame && <p className="g3d-note">{t("qualityInGame")}</p>}
         <div className="g3d-row end">
           <button type="button" className="g3d-chip" onClick={resetSettings}>
@@ -311,37 +312,30 @@ export function HowToPlay({ touch, onBack, onUpgrades }: { touch: boolean; onBac
           <p>{t("helpTouch")}</p>
         ) : (
           <table className="g3d-keys">
-            <thead>
-              <tr>
-                <th />
-                <th>{t("helpP1")}</th>
-                <th>{t("helpP2")}</th>
-              </tr>
-            </thead>
             <tbody>
               <tr>
                 <td>{t("helpMove")}</td>
                 <td>WASD / ↑←↓→</td>
-                <td>↑←↓→</td>
+              </tr>
+              <tr>
+                <td>{t("helpAim")}</td>
+                <td>{t("helpAimKeys")}</td>
               </tr>
               <tr>
                 <td>{t("helpFire")}</td>
-                <td>F / Space / J / Enter</td>
-                <td>Enter</td>
+                <td>{t("helpFireKeys")}</td>
               </tr>
               <tr>
                 <td>{t("helpSwap")}</td>
                 <td>G / Q / K / {t("keyRightShift")}</td>
-                <td>{t("keyRightShift")}</td>
               </tr>
               <tr>
                 <td>{t("helpPauseMute")}</td>
-                <td colSpan={2}>P / Esc · M</td>
+                <td>P / Esc · M</td>
               </tr>
             </tbody>
           </table>
         )}
-        {!touch && <p className="g3d-note">{t("help2pNote")}</p>}
 
         <h3>{t("helpEnemies")}</h3>
         <ul>
