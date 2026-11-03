@@ -31,6 +31,10 @@ code in `apps/server`) serves the static website and also runs the online rooms.
 - Online scores are never accepted from a browser. The room server saves the team score itself when a game ends, which is why those cannot be faked.
 - `GET /api/scores?map=&mode=&limit=50` returns the best first and is cached for 30 seconds.
 - See and clear data: `cd apps/server && npx wrangler d1 execute DB --remote --command "SELECT * FROM scores ORDER BY score DESC LIMIT 20"`.
+- Score posts must come from the game page: the site's `Origin`, a JSON body and (when sent) `Sec-Fetch-Site:
+  same-origin`; anything else gets 403 and is logged. Each local run asks `POST /api/runs {map}` for a one-time ticket
+  (table `run_tickets`, 30 a minute per sender); the score must bring it back, for the same map, at least the claimed
+  play time after it was issued (3 s slack), within 12 hours. A used ticket cannot be used again.
 - Every submit attempt (stored, rejected as invalid, or rate limited) is logged privately in `score_submissions` with the
   IP, Cloudflare's location (country, region, city), network (ASN and name), data centre and browser. It is never
   returned by the public API, and rows older than 90 days are deleted. Recent rejected attempts:
