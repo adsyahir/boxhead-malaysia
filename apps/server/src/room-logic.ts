@@ -75,6 +75,8 @@ interface Seat {
   /** Highest input sequence number received, echoed in snapshots so the client can reconcile its prediction. */
   ackSeq: number;
   lastSwitch: boolean;
+  /** Used aim assist at some point in this run. */
+  assisted: boolean;
   /** Message budget, refilled over time, so a flooding client is dropped. */
   bucket: number;
   bucketAt: number;
@@ -145,7 +147,7 @@ export class RoomLogic {
     const hero = HERO_IDS.find((h) => !taken.has(h)) ?? "abu";
     const seat: Seat = {
       name: trimmed, hero, ready: false, token: this.d.token(), conn, lostAt: null,
-      mx: 0, my: 0, ax: 0, ay: 0, fire: false, swap: false, taps: 0, tapsDone: 0, pendingSelect: undefined, ackSeq: 0, lastSwitch: false,
+      mx: 0, my: 0, ax: 0, ay: 0, fire: false, swap: false, taps: 0, tapsDone: 0, pendingSelect: undefined, ackSeq: 0, lastSwitch: false, assisted: false,
       bucket: BUCKET_MAX, bucketAt: this.d.now(),
     };
     this.seats[free] = seat;
@@ -224,6 +226,7 @@ export class RoomLogic {
         seat.swap = msg.swap;
         if (msg.taps > seat.taps) seat.taps = msg.taps;
         if (msg.sel !== undefined) seat.pendingSelect = msg.sel;
+        if (msg.assist && this.state === "playing") seat.assisted = true;
         return;
       case "leave":
         this.leave(slot);
@@ -287,6 +290,7 @@ export class RoomLogic {
       s.pendingSelect = undefined;
       s.ackSeq = 0;
       s.lastSwitch = false;
+      s.assisted = false;
       s.mx = s.my = s.ax = s.ay = 0;
       s.fire = s.swap = false;
     }
@@ -367,6 +371,10 @@ export class RoomLogic {
 
   /** The server ran this game itself, so it records the team score; players are told whether it was stored. */
   private saveRun(run: RunResult): void {
+    if (this.seats.some((s) => s?.assisted)) {
+      for (const s of this.seats) s?.conn?.send({ t: "saved", rank: null, assisted: true });
+      return;
+    }
     const save = this.d.saveScore;
     if (!save) return;
     const names = this.seats.filter((s): s is Seat => s !== null).map((s) => s.name);

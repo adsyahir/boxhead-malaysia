@@ -12,6 +12,7 @@ describe("parseClientMsg", () => {
       { t: "start" },
       { t: "input", seq: 1, mx: -1, my: 0.5, fire: true, swap: false, taps: 3 },
       { t: "input", seq: 2, mx: 0, my: 0, fire: false, swap: false, taps: 3, sel: 9 },
+      { t: "input", seq: 3, mx: 0, my: 0, fire: true, swap: false, taps: 3, assist: true },
       { t: "ping", n: 7 },
       { t: "leave" },
     ];

@@ -267,6 +267,19 @@ describe("saving the online score", () => {
     expect(g.a.last("saved")).toEqual({ t: "saved", rank: 4 });
   });
 
+  it("does not save a run a player used aim assist in, and tells the players why", async () => {
+    let saves = 0;
+    const g = savedGame(async () => {
+      saves++;
+      return 1;
+    });
+    g.room.message(0, { t: "input", seq: 1, mx: 0, my: 0, fire: false, swap: false, taps: 0, assist: true });
+    g.room.message(0, { t: "input", seq: 2, mx: 0, my: 0, fire: false, swap: false, taps: 0 }); // turning it off does not undo it
+    await finishRun(g);
+    expect(saves).toBe(0);
+    expect(g.a.last("saved")).toEqual({ t: "saved", rank: null, assisted: true });
+  });
+
   it("tells the players it could not be saved when the write fails", async () => {
     const g = savedGame(async () => {
       throw new Error("db down");

@@ -71,6 +71,8 @@ export const ClientMsgSchema = z.discriminatedUnion("t", [
     taps: z.number().int().min(0).max(2_000_000_000),
     /** Direct weapon pick for one input (0..9 = keys 1..9, 0). Omitted when no number key was pressed. */
     sel: z.number().int().min(0).max(9).optional(),
+    /** This player has used aim assist this run, which keeps the team score off the leaderboard. */
+    assist: z.literal(true).optional(),
   }),
   z.object({ t: z.literal("ping"), n: z.number().int().min(0).max(2_000_000_000) }),
   z.object({ t: z.literal("leave") }),
@@ -105,8 +107,8 @@ export type ServerMsg =
   | { t: "start"; map: MapId; seed: number; heroes: HeroId[]; you: Slot }
   | { t: "snap"; s: Snapshot; e: GameEvent[] }
   | { t: "over"; run: RunResult }
-  /** The team score of the finished online run was stored (rank in the online board for that map), or could not be (null). */
-  | { t: "saved"; rank: number | null }
+  /** The team score of the finished online run was stored (rank in the online board for that map), or was not (null; `assisted` when aim assist is why). */
+  | { t: "saved"; rank: number | null; assisted?: true }
   | { t: "error"; code: ErrorCode; msg: string }
   | { t: "pong"; n: number };
 
