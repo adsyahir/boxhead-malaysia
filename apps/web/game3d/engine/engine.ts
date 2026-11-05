@@ -15,6 +15,7 @@ import type { OnlineClient } from "../net/client";
 import { Predictor } from "../net/predictor";
 import { UNIT_BOX, UNIT_QUAD } from "./batch";
 import { CameraRig } from "./camera";
+import { assistedAim } from "./aim-assist";
 import { MouseAim } from "./mouse-aim";
 import { PerfMeter, pingSummary, type PerfStats } from "./perf";
 import { toX, toZ } from "./coords";
@@ -74,6 +75,8 @@ export class Engine {
   private playerCount: 1 | 2 = 1;
   private keyboard: WindowKeyboard | null = null;
   private mouse: MouseAim | null = null;
+  /** Aim assist was on at some point this run. Stays set if it is turned off again. */
+  private assistUsed = false;
   private readonly perf = new PerfMeter();
   private perfAt = 0;
   /** Set while playing a room: the world is rebuilt from server snapshots instead of simulated here. */
@@ -177,6 +180,7 @@ export class Engine {
     setActiveCharacters(characters);
     this.view.setCharacters(characters);
     this.world = createWorld({ seed: newRunSeed(), map: this.built.loaded.data, playerCount: players });
+    this.assistUsed = false;
     this.acc = 0;
     this.paused = false;
     this.ended = false;
@@ -221,6 +225,7 @@ export class Engine {
     this.paused = false;
     this.ended = false;
     this.frames = 0;
+    this.assistUsed = false;
     if (!this.touch) {
       this.keyboard = new WindowKeyboard(1);
       this.mouse = new MouseAim(this.canvas);
@@ -242,7 +247,7 @@ export class Engine {
       this.mode = "over";
       this.keyboard?.destroy();
       this.keyboard = null;
-      this.cb.onGameOver({ ...run, mode: "online" });
+      this.cb.onGameOver({ ...run, mode: "online", aimAssist: this.assistUsed });
     }, 1100);
   }
 
@@ -348,11 +353,10 @@ export class Engine {
   }
 
   private sampleInputs(): { inputs: PlayerInput[]; swapTapped: boolean[] } {
-    if (this.touch) return sampleTouch();
-    const sampled = this.keyboard ? this.keyboard.sample() : { inputs: [], swapTapped: [] };
+    const sampled = this.touch ? sampleTouch() : this.keyboard ? this.keyboard.sample() : { inputs: [], swapTapped: [] };
     const mine = sampled.inputs[0];
     const hero = this.world?.players[this.online ? this.online.you : 0];
-    if (mine && hero && this.mouse) {
+    if (mine && hero && this.mouse && !this.touch) {
       // The local hero (inputs[0], also online) faces the cursor once the mouse is in use; left click fires.
       const aim = this.mouse.aim(this.cam.camera, hero.x, hero.y);
       if (aim) {
@@ -361,11 +365,21 @@ export class Engine {
       }
       mine.fire = mine.fire || this.mouse.fire;
     }
+    if (getSettings().aimAssist) {
+      this.assistUsed = true;
+      if (mine?.fire && hero?.alive && this.world) {
+        const lock = assistedAim(this.world.map, hero.x, hero.y, this.world.enemies, mine.aimX, mine.aimY);
+        if (lock) {
+          mine.aimX = lock.x;
+          mine.aimY = lock.y;
+        }
+      }
+    }
     return sampled;
   }
 
   private publishHud(): void {
-    if (this.world) this.cb.onHud(buildHudState(this.world, this.paused));
+    if (this.world) this.cb.onHud({ ...buildHudState(this.world, this.paused), aimAssist: this.assistUsed });
   }
 
   private finish(e: Extract<GameEvent, { type: "gameOver" }>): void {
@@ -379,6 +393,7 @@ export class Engine {
       durationMs: e.durationMs,
       map: this.mapKey,
       mode: this.playerCount === 2 ? "2p" : "1p",
+      aimAssist: this.assistUsed,
     };
     this.cb.onEnding();
     this.endTimer = setTimeout(() => {
@@ -424,7 +439,7 @@ export class Engine {
     if (mine && !this.ended) {
       if (sampled.swapTapped[0]) o.taps++;
       if (mine.select !== undefined) o.sel = mine.select; // keep a number-key pick until the next send actually goes out
-      const seq = o.link.sendInput({ mx: mine.moveX, my: mine.moveY, ax: mine.aimX, ay: mine.aimY, fire: mine.fire, swap: mine.switchWeapon, taps: o.taps, sel: o.sel }, nowMs);
+      const seq = o.link.sendInput({ mx: mine.moveX, my: mine.moveY, ax: mine.aimX, ay: mine.aimY, fire: mine.fire, swap: mine.switchWeapon, taps: o.taps, sel: o.sel, assist: this.assistUsed }, nowMs);
       if (seq !== null) {
         o.sel = undefined;
         o.predictor?.recordSent(seq, nowMs);

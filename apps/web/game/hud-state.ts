@@ -25,6 +25,8 @@ export interface HudState {
   breakTimer: number;
   unlocked: WeaponId[];
   paused: boolean;
+  /** Aim assist was on at some point this run (set by the 3D engine). */
+  aimAssist?: boolean;
   enemiesLeft: number;
 }
 

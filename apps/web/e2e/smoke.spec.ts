@@ -591,6 +591,118 @@ test("game over: submit a score with a nickname, then find it on the leaderboard
   await expect(page.getByRole("row", { name: new RegExp(nick) })).toContainText("600");
 });
 
+test("aim assist: asks twice, Esc and Cancel keep it off, and a run with it on has no score submit", async ({ page }) => {
+  await page.goto("/?debug");
+  await expect(page.getByRole("button", { name: /Mula/ })).toBeVisible({ timeout: 30_000 });
+  await page.getByRole("button", { name: /Tetapan/ }).click();
+  const row = page.locator(".g3d-row", { hasText: "Bantuan bidik" }).getByRole("button");
+  await expect(row).toHaveAttribute("aria-pressed", "false");
+
+  await row.click();
+  await expect(page.getByRole("alertdialog", { name: "Hidupkan bantuan bidik?" })).toBeVisible();
+  await page.keyboard.press("Escape"); // closes the warning only, Settings stays open
+  await expect(page.getByRole("alertdialog")).toHaveCount(0);
+  await expect(row).toBeFocused();
+
+  await row.click();
+  await page.getByRole("button", { name: "Teruskan" }).click();
+  await expect(page.getByRole("alertdialog", { name: "Anda pasti?" })).toBeVisible();
+  await page.getByRole("button", { name: "Batal" }).click();
+  await expect(row).toHaveAttribute("aria-pressed", "false");
+
+  await row.click();
+  await page.getByRole("button", { name: "Teruskan" }).click();
+  await page.getByRole("button", { name: "Ya, hidupkan" }).click();
+  await expect(row).toHaveAttribute("aria-pressed", "true");
+
+  await page.getByRole("button", { name: "Siap" }).click();
+  await page.getByRole("button", { name: /Mula/ }).click();
+  await page.getByRole("button", { name: /1 Pemain/ }).click();
+  await page.getByRole("button", { name: /Abu/ }).click();
+  await page.getByRole("button", { name: /Kampung Pisang/ }).click();
+  await expect(page.locator("canvas")).toHaveAttribute("data-scene", "Game", { timeout: 20_000 });
+  await expect(page.getByText("Bantuan bidik: tiada papan markah")).toBeVisible();
+
+  await page.evaluate(() => {
+    const w = (window as unknown as { __kppWorld: () => { players: { hp: number; alive: boolean }[] } }).__kppWorld();
+    w.players[0]!.hp = 0;
+    w.players[0]!.alive = false;
+  });
+  await expect(page.getByRole("heading", { name: "TAMAT" })).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByText("Bantuan bidik dihidupkan")).toBeVisible();
+  await expect(page.getByText("Tiada penghantaran markah. Markah ini tidak masuk papan markah.")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Hantar markah" })).toHaveCount(0);
+  await expect(page.getByLabel("Nama anda")).toHaveCount(0);
+});
+
+test("aim assist: holding fire turns the hero to a ghost it was not facing", async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem("kpp-settings", JSON.stringify({ aimAssist: true })));
+  await page.goto("/?debug");
+  await page.getByRole("button", { name: /Mula/ }).click({ timeout: 30_000 });
+  await page.getByRole("button", { name: /1 Pemain/ }).click();
+  await page.getByRole("button", { name: /Abu/ }).click();
+  await page.getByRole("button", { name: /Kampung Pisang/ }).click();
+  const canvas = page.locator("canvas");
+  await expect(canvas).toHaveAttribute("data-scene", "Game", { timeout: 20_000 });
+  await expect.poll(() => canvas.getAttribute("data-tick").then(Number), { timeout: 10_000 }).toBeGreaterThan(30);
+
+  type W = { players: { x: number; y: number; hp: number; maxHp: number; facing: { x: number; y: number } }[]; enemies: { x: number; y: number; rise: number }[] };
+  const pinGhost = () =>
+    page.evaluate(() => {
+      const w = (window as unknown as { __kppWorld(): W }).__kppWorld();
+      const hero = w.players[0]!;
+      hero.hp = hero.maxHp;
+      w.enemies.forEach((e, i) => {
+        e.x = hero.x + (i === 0 ? -90 : -2000); // one ghost to the left, the others out of range
+        e.y = hero.y;
+        e.rise = 0;
+      });
+      return { ghosts: w.enemies.length, facingX: hero.facing.x };
+    });
+  await expect.poll(async () => (await pinGhost()).ghosts, { timeout: 15_000 }).toBeGreaterThan(0);
+  expect((await pinGhost()).facingX).toBeGreaterThan(-0.5); // starts facing away
+
+  await page.keyboard.down("f");
+  await expect.poll(async () => (await pinGhost()).facingX, { timeout: 5000 }).toBeLessThan(-0.9);
+  await page.keyboard.up("f");
+});
+
+test("aim assist: the warning stays on a phone screen, with both buttons reachable", async ({ page }) => {
+  await page.setViewportSize({ width: 740, height: 360 });
+  await page.goto("/");
+  await page.getByRole("button", { name: /Tetapan/ }).click({ timeout: 30_000 });
+  await page.locator(".g3d-row", { hasText: "Bantuan bidik" }).getByRole("button").click();
+  await page.getByRole("button", { name: "Teruskan" }).click();
+  const box = (await page.locator(".g3d-confirm-box").boundingBox())!;
+  expect(box.y).toBeGreaterThanOrEqual(0);
+  expect(box.y + box.height).toBeLessThanOrEqual(360);
+  await page.getByRole("button", { name: "Ya, hidupkan" }).click(); // Playwright scrolls to it if the box had to scroll
+  await expect(page.locator(".g3d-row", { hasText: "Bantuan bidik" }).getByRole("button")).toHaveAttribute("aria-pressed", "true");
+});
+
+test("aim assist online: one player using it keeps the team score off the board, and both are told", async ({ browser }) => {
+  test.setTimeout(300_000);
+  const host = await openOnline(browser, "Assist Host", { aimAssist: true });
+  await host.getByRole("button", { name: "Cipta bilik peribadi" }).click();
+  const code = (await host.getByTestId("room-code").textContent())!.trim();
+  const guest = await openOnline(browser, "Assist Guest");
+  await guest.getByPlaceholder("KOD").fill(code);
+  await guest.getByRole("button", { name: "Sertai", exact: true }).click();
+  await guest.getByRole("button", { name: "Saya sedia" }).click();
+  await host.getByRole("button", { name: "Mula Permainan" }).click();
+  await expect(host.locator("canvas")).toHaveAttribute("data-scene", "Game", { timeout: 20_000 });
+  await expect(host.getByText("Bantuan bidik: tiada papan markah")).toBeVisible();
+  await expect(guest.getByText("Bantuan bidik: tiada papan markah")).toHaveCount(0);
+
+  // nobody moves, so the ghosts end the run
+  await expect(host.getByRole("heading", { name: "TAMAT" })).toBeVisible({ timeout: 240_000 });
+  await expect(host.getByText("Bantuan bidik dihidupkan")).toBeVisible();
+  await expect(guest.getByText("Seorang pemain menggunakan bantuan bidik")).toBeVisible({ timeout: 10_000 });
+  await expect(guest.getByText("Tiada penghantaran markah. Markah ini tidak masuk papan markah.")).toBeVisible();
+  await host.context().close();
+  await guest.context().close();
+});
+
 test("game over: a failed submit says so and can be retried with the run kept", async ({ page }) => {
   await page.goto("/?debug");
   await expect(page.getByRole("button", { name: /Mula/ })).toBeVisible({ timeout: 30_000 });

@@ -117,6 +117,8 @@ export default function Game3D() {
   isOnlineRef.current = isOnline;
   /** Online run: undefined until the room server says whether the team score was stored. */
   const [savedRank, setSavedRank] = useState<number | null | undefined>(undefined);
+  /** The room server refused the team score because someone in the room used aim assist. */
+  const [teamAssisted, setTeamAssisted] = useState(false);
   const [onlineMenu, setOnlineMenu] = useState(false);
   const onlineMenuRef = useRef(false);
   onlineMenuRef.current = onlineMenu;
@@ -220,6 +222,7 @@ export default function Game3D() {
       setHud(null);
       setCharacters(s.heroes);
       setSavedRank(undefined);
+      setTeamAssisted(false);
       setIsOnline(true);
       go("Game");
       const e = engine.current;
@@ -251,7 +254,10 @@ export default function Game3D() {
           if (screenRef.current !== "Game") startOnlineGame(st);
         },
         onOver: (r) => engine.current?.endOnlineRun(r),
-        onSaved: (rank) => setSavedRank(rank),
+        onSaved: (rank, assisted) => {
+          setSavedRank(rank);
+          setTeamAssisted(assisted);
+        },
         onError: (code2, _msg) => {
           setNetError(ERROR_KEY[code2]);
           setBusy(false);
@@ -582,6 +588,7 @@ export default function Game3D() {
         <GameOver
           run={run}
           savedRank={savedRank}
+          teamAssisted={teamAssisted}
           onAgain={() => (run.mode === "online" ? netRef.current?.send({ t: "ready", ready: false }) : startGame(run.map, run.mode === "2p" ? 2 : 1, characters))}
           onMenu={run.mode === "online" ? leaveRoomToMenu : toMenu}
           onBoard={toBoard}

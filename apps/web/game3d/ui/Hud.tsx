@@ -74,6 +74,7 @@ export default function Hud({ hud, touch, toast, muted, onMute, onPause, onExit,
             {t("combo", { n: hud.combo })}
           </div>
         )}
+        {hud.aimAssist && <div className="g3d-assist-tag">{t("aimAssistTag")}</div>}
       </div>
       <div className="g3d-corner">
         <button type="button" className="g3d-icon" tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={onPause} aria-label={t("pause")}>

@@ -18,7 +18,7 @@ export interface ClientEvents {
   onStart(s: { map: MapId; heroes: HeroId[]; you: Slot }): void;
   onOver(run: RunResult): void;
   /** The room server stored (or failed to store) the finished team score. */
-  onSaved(rank: number | null): void;
+  onSaved(rank: number | null, assisted: boolean): void;
   onError(code: ErrorCode, msg: string): void;
 }
 
@@ -167,7 +167,7 @@ export class OnlineClient {
         this.ev.onOver(m.run);
         return;
       case "saved":
-        this.ev.onSaved(m.rank);
+        this.ev.onSaved(m.rank, m.assisted === true);
         return;
       case "error":
         if (m.code === "bad_name" || m.code === "no_room" || m.code === "room_full" || m.code === "in_progress") this.token = "";
@@ -196,12 +196,12 @@ export class OnlineClient {
   }
 
   /** Called every frame; sends at most NET.inputHz per second. Returns the sequence number it sent, or null if it was too soon. */
-  sendInput(i: { mx: number; my: number; ax?: number; ay?: number; fire: boolean; swap: boolean; taps: number; sel?: number }, nowMs: number): number | null {
+  sendInput(i: { mx: number; my: number; ax?: number; ay?: number; fire: boolean; swap: boolean; taps: number; sel?: number; assist?: boolean }, nowMs: number): number | null {
     if (nowMs - this.lastInputAt < 1000 / NET.inputHz) return null;
     this.lastInputAt = nowMs;
     const seq = ++this.seq;
     const aim = i.ax || i.ay ? { ax: i.ax ?? 0, ay: i.ay ?? 0 } : {};
-    this.send({ t: "input", seq, mx: i.mx, my: i.my, ...aim, fire: i.fire, swap: i.swap, taps: i.taps, ...(i.sel !== undefined ? { sel: i.sel } : {}) });
+    this.send({ t: "input", seq, mx: i.mx, my: i.my, ...aim, fire: i.fire, swap: i.swap, taps: i.taps, ...(i.sel !== undefined ? { sel: i.sel } : {}), ...(i.assist ? { assist: true as const } : {}) });
     return seq;
   }
 

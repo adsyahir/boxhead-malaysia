@@ -15,4 +15,6 @@ export interface RunSummary {
   mode: "1p" | "2p" | "online";
   /** Run ticket asked for when a local run started (3D client); the score submit sends it back. */
   ticket?: Promise<string | null>;
+  /** Aim assist was on at some point in this run, so it cannot be submitted. */
+  aimAssist?: boolean;
 }

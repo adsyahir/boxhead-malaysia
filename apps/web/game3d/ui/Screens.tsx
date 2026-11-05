@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { UPGRADE_LIST, WEAPONS, WEAPON_IDS } from "@kampung/game-core";
 import { CHARACTERS, HEROES, characterName, hex, type Character } from "../../game/characters";
 import type { RunSummary } from "../../game/constants";
@@ -237,6 +238,86 @@ function FullscreenRow() {
   );
 }
 
+/** Turning aim assist on asks twice, because it costs the player the leaderboard. Turning it off never asks. */
+/* The warning is portalled to the body: the Settings panel scrolls, which would carry a fixed overlay off a phone screen. */
+function AimAssistRow() {
+  const t = useT();
+  const s = useSettings();
+  const [step, setStep] = useState<0 | 1 | 2>(0);
+  const toggle = useRef<HTMLButtonElement>(null);
+  const box = useRef<HTMLDivElement>(null);
+  const close = useCallback(() => {
+    setStep(0);
+    toggle.current?.focus();
+  }, []);
+
+  useEffect(() => {
+    if (step === 0) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.stopPropagation(); // Esc closes this warning, not the Settings screen behind it
+        close();
+      } else if (e.key === "Tab") {
+        const btns = [...(box.current?.querySelectorAll("button") ?? [])];
+        const at = btns.indexOf(document.activeElement as HTMLButtonElement);
+        e.preventDefault();
+        btns[(at + (e.shiftKey ? btns.length - 1 : 1)) % btns.length]?.focus();
+      }
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [step, close]);
+
+  return (
+    <>
+      <div className="g3d-row">
+        <span>{t("aimAssist")}</span>
+        <button
+          ref={toggle}
+          type="button"
+          className={`g3d-chip${s.aimAssist ? " on" : ""}`}
+          onClick={() => (s.aimAssist ? updateSettings({ aimAssist: false }) : setStep(1))}
+          aria-pressed={s.aimAssist}
+        >
+          {s.aimAssist ? t("fullscreenOn") : t("fullscreenOff")}
+        </button>
+      </div>
+      <p className="g3d-note">{t("aimAssistNote")}</p>
+      {step !== 0 &&
+        createPortal(
+        <div className="g3d-confirm g3d-assist-confirm" role="alertdialog" aria-modal="true" aria-labelledby="assist-title" aria-describedby="assist-body">
+          <div className="g3d-confirm-box" ref={box} key={step}>
+            <h2 id="assist-title">{step === 1 ? t("aimAssistAsk1Title") : t("aimAssistAsk2Title")}</h2>
+            <p id="assist-body">{step === 1 ? t("aimAssistAsk1Body") : t("aimAssistAsk2Body")}</p>
+            <div className="g3d-confirm-actions">
+              <button type="button" className="g3d-btn primary" onClick={close} autoFocus>
+                {t("aimAssistCancel")}
+              </button>
+              {step === 1 ? (
+                <button type="button" className="g3d-btn danger" onClick={() => setStep(2)}>
+                  {t("aimAssistContinue")}
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className="g3d-btn danger"
+                  onClick={() => {
+                    updateSettings({ aimAssist: true });
+                    close();
+                  }}
+                >
+                  {t("aimAssistConfirm")}
+                </button>
+              )}
+            </div>
+          </div>
+        </div>,
+          document.body,
+        )}
+    </>
+  );
+}
+
 export function SettingsScreen({ onBack, inGame = false }: { onBack(): void; inGame?: boolean }) {
   const t = useT();
   const s = useSettings();
@@ -283,6 +364,7 @@ export function SettingsScreen({ onBack, inGame = false }: { onBack(): void; inG
           </button>
         </div>
         <p className="g3d-note">{t("perfNote")}</p>
+        <AimAssistRow />
         {inGame && <p className="g3d-note">{t("qualityInGame")}</p>}
         <div className="g3d-row end">
           <button type="button" className="g3d-chip" onClick={resetSettings}>
@@ -426,6 +508,7 @@ export function Credits({ onBack }: { onBack(): void }) {
 export function GameOver({
   run,
   savedRank,
+  teamAssisted = false,
   onAgain,
   onMenu,
   onBoard,
@@ -433,6 +516,8 @@ export function GameOver({
   run: RunSummary;
   /** Online runs: undefined while the server is still saving, a rank when stored, null when it could not be. */
   savedRank?: number | null;
+  /** Online: the server kept the score off the leaderboard because a player in the room used aim assist. */
+  teamAssisted?: boolean;
   onAgain(): void;
   onMenu(): void;
   onBoard(): void;
@@ -440,6 +525,9 @@ export function GameOver({
   const online = run.mode === "online";
   const t = useT();
   const secs = Math.round(run.durationMs / 1000);
+  const { aimAssist } = useSettings();
+  const assisted = run.aimAssist === true || teamAssisted;
+  const assistTitle = !run.aimAssist ? "aimAssistOverTeam" : aimAssist ? "aimAssistOverOn" : "aimAssistOverUsed";
   return (
     <div className="g3d-screen g3d-over">
       <h2 className="g3d-dead">{t("gameOver")}</h2>
@@ -461,7 +549,12 @@ export function GameOver({
           {Math.floor(secs / 60)}m {secs % 60}s
         </dd>
       </dl>
-      {online ? (
+      {assisted ? (
+        <div className="g3d-submit" role="status">
+          <h3>{t(assistTitle)}</h3>
+          <p className="g3d-note">{t("aimAssistNoSubmit")}</p>
+        </div>
+      ) : online ? (
         // an empty run (0 points) is never stored, so there is nothing to report
         run.score > 0 && (
           <p className="g3d-note" role="status">

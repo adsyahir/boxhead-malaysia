@@ -10,9 +10,11 @@ export interface Settings {
   quality: Quality;
   /** Performance display: FPS and frame time, plus ping and network numbers when online. */
   perf: boolean;
+  /** Aim assist. A run that used it cannot go on the leaderboard. */
+  aimAssist: boolean;
 }
 
-export const DEFAULT_SETTINGS: Settings = { lang: "ms", volume: 0.8, muted: false, quality: "high", perf: false };
+export const DEFAULT_SETTINGS: Settings = { lang: "ms", volume: 0.8, muted: false, quality: "high", perf: false, aimAssist: false };
 
 const KEY = "kpp-settings";
 const LEGACY_MUTE_KEY = "kpp-mute";
@@ -30,6 +32,7 @@ function clean(raw: unknown): Partial<Settings> {
   if (typeof r.muted === "boolean") out.muted = r.muted;
   if (r.quality === "high" || r.quality === "low") out.quality = r.quality;
   if (typeof r.perf === "boolean") out.perf = r.perf;
+  if (typeof r.aimAssist === "boolean") out.aimAssist = r.aimAssist;
   return out;
 }
 
